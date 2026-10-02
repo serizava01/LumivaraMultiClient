@@ -38,7 +38,7 @@
     <ApplicationManifest>Models\app.manifest</ApplicationManifest>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>825815658_122112522135479696_5364523194829239007_n.ico</ApplicationIcon>
+    <ApplicationIcon>LumivaraMultiClient.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Web.WebView2.Core, Version=1.0.4258.31, Culture=neutral, PublicKeyToken=2a8ab48044d2601e, processorArchitecture=MSIL">
@@ -89,7 +89,6 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
-    <None Include=".github\workflows\build-release.yml" />
     <None Include="Models\app.manifest" />
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
@@ -106,7 +105,7 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="825815658_122112522135479696_5364523194829239007_n.ico" />
+    <Content Include="LumivaraMultiClient.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.4258.31\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.4258.31\build\Microsoft.Web.WebView2.targets')" />

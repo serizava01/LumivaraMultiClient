@@ -59,5 +59,15 @@ namespace LumivaraMultiClient.Properties {
                 resourceCulture = value;
             }
         }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Byte[].
+        /// </summary>
+        public static byte[] LumivaraMultiClient {
+            get {
+                object obj = ResourceManager.GetObject("LumivaraMultiClient", resourceCulture);
+                return ((byte[])(obj));
+            }
+        }
     }
 }

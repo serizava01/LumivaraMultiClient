@@ -34,7 +34,9 @@ namespace LumivaraMultiClient.Forms
             InitializeTrayIcon();
             LoadSavedInstances();
         }
-
+        /// <summary>
+        /// กำหนดค่า UI หลักของแอปพลิเคชัน
+        /// </summary>
         private void InitializeMainUI()
         {
             this.Text = "Lumivara Online - Multi Client Manager";
@@ -45,7 +47,7 @@ namespace LumivaraMultiClient.Forms
 
             Button btnAddTab = new Button
             {
-                Text = "+ Add New Client",
+                Text = "+ เพิ่ม Client",
                 Width = 130,
                 Height = 30,
                 Location = new Point(10, 5)
@@ -54,7 +56,7 @@ namespace LumivaraMultiClient.Forms
 
             Button btnHideToTray = new Button
             {
-                Text = "Hide to Tray",
+                Text = "ซ่อนไปยัง Tray",
                 Width = 110,
                 Height = 30,
                 Location = new Point(150, 5)
@@ -64,7 +66,7 @@ namespace LumivaraMultiClient.Forms
    
             Button Wiki = new Button
             {
-                Text = "Wiki",
+                Text = "ดู Wiki",
                 Width = 90,
                 Height = 30,
                 Location = new Point(270, 5)
@@ -75,7 +77,7 @@ namespace LumivaraMultiClient.Forms
        
             Button Updates = new Button
             {
-                Text = "Changelog",
+                Text = "เช็คอัพเดต",
                 Width = 100,
                 Height = 30,
                 Location = new Point(370, 5)
@@ -84,7 +86,7 @@ namespace LumivaraMultiClient.Forms
             
             Button LinkFB = new Button
             {
-                Text = "Facebook",
+                Text = "เฟสบุคพัฒนา",
                 Width = 100,
                 Height = 30,
                 Location = new Point(480, 5)
@@ -93,7 +95,7 @@ namespace LumivaraMultiClient.Forms
 
             Button Github = new Button
             {
-                Text = "Github",
+                Text = "GitHubผู้พัฒนา",
                 Width = 100,
                 Height = 30,
                 Location = new Point(590, 5)
@@ -116,6 +118,9 @@ namespace LumivaraMultiClient.Forms
         /// 
         /// สร้างระบบ Tray Icon ตรงมุมขวาล่างแถบ Taskbar
         /// 
+        /// 
+        /// สร้างระบบ Tray Icon ตรงมุมขวาล่างแถบ Taskbar
+        /// 
         private void InitializeTrayIcon()
         {
             trayMenu = new ContextMenuStrip();
@@ -128,20 +133,16 @@ namespace LumivaraMultiClient.Forms
 
             trayMenu.Items.Add(showMenuItem);
             trayMenu.Items.Add(exitMenuItem);
-
-            Icon icons = SystemIcons.Application;
-            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LumivaraMultiClient.ico");
-
-            if(File.Exists(iconPath))
+            Icon appIcon;
+            using (MemoryStream ms = new MemoryStream(Properties.Resources.LumivaraMultiClient))
             {
-                icons = new Icon(iconPath);
-                this.Icon = icons;
+                appIcon = new Icon(ms);
             }
-
+            this.Icon = appIcon;
             trayIcon = new NotifyIcon
             {
                 Text = "Lumivara Multi Client",
-                Icon = new Icon(iconPath),
+                Icon = appIcon,
                 ContextMenuStrip = trayMenu,
                 Visible = false
             };
@@ -166,6 +167,29 @@ namespace LumivaraMultiClient.Forms
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
+        }
+        private Icon GetEmbeddedIcon()
+        {
+            try
+            {
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+
+                string resourceName = Array.Find(
+                    assembly.GetManifestResourceNames(),
+                    str => str.EndsWith("LumivaraMultiClient.ico", StringComparison.OrdinalIgnoreCase)
+                );
+
+                if (!string.IsNullOrEmpty(resourceName))
+                {
+                    using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+                    {
+                        if (stream != null) return new Icon(stream);
+                    }
+                }
+            }
+            catch { }
+
+            return SystemIcons.Application;
         }
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
@@ -352,6 +376,11 @@ namespace LumivaraMultiClient.Forms
         private void UpdateAppTitle()
         {
             this.Text = $"Lumivara Online - Multi Client Manager ({tabControl.TabPages.Count} Client(s) Loaded)";
+        }
+
+        private void MainForm_Load(object sender, EventArgs e)
+        {
+
         }
     }
 }
