@@ -1,4 +1,4 @@
-﻿name: Build and Release .NET Framework App
+name: Build and Release .NET Framework App
 
 on:
   push:
@@ -23,16 +23,16 @@ jobs:
         uses: NuGet/setup-nuget@v2
 
       - name: Restore NuGet Packages
-        run: nuget restore LumivaraMultiClient.sln
+        run: nuget restore LumivaraMultiClient.slnx
 
       - name: Build Project
-        run: msbuild LumivaraMultiClient.sln /p:Configuration=Release /p:OutputPath=..\output
-
+        run: msbuild LumivaraMultiClient.slnx /p:Configuration=Release /p:OutputPath=${{ github.workspace }}\output
+        
       - name: Zip Output
         shell: pwsh
         run: |
-          Compress-Archive -Path .\output\* -DestinationPath LumivaraMultiClient.zip
-
+          Compress-Archive -Path ${{ github.workspace }}\output\* -DestinationPath LumivaraMultiClient.zip
+          
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
