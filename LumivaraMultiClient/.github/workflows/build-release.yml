@@ -1,0 +1,42 @@
+﻿name: Build and Release .NET Framework App
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet Packages
+        run: nuget restore LumivaraMultiClient.sln
+
+      - name: Build Project
+        run: msbuild LumivaraMultiClient.sln /p:Configuration=Release /p:OutputPath=..\output
+
+      - name: Zip Output
+        shell: pwsh
+        run: |
+          Compress-Archive -Path .\output\* -DestinationPath LumivaraMultiClient.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LumivaraMultiClient.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
