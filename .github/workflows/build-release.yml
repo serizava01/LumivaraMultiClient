@@ -1,0 +1,43 @@
+name: Build and Release C# Application
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build & Publish Project
+        run: |
+          dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
+
+      - name: Zip Output
+        shell: pwsh
+        run: |
+          Compress-Archive -Path ./publish/* -DestinationPath LumivaraMultiClient.zip
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: LumivaraMultiClient.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
