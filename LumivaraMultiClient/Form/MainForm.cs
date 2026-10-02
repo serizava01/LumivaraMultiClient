@@ -118,9 +118,7 @@ namespace LumivaraMultiClient.Forms
         /// 
         /// สร้างระบบ Tray Icon ตรงมุมขวาล่างแถบ Taskbar
         /// 
-        /// 
-        /// สร้างระบบ Tray Icon ตรงมุมขวาล่างแถบ Taskbar
-        /// 
+
         private void InitializeTrayIcon()
         {
             trayMenu = new ContextMenuStrip();
@@ -167,29 +165,6 @@ namespace LumivaraMultiClient.Forms
             trayIcon.Visible = false;
             trayIcon.Dispose();
             Application.Exit();
-        }
-        private Icon GetEmbeddedIcon()
-        {
-            try
-            {
-                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-
-                string resourceName = Array.Find(
-                    assembly.GetManifestResourceNames(),
-                    str => str.EndsWith("LumivaraMultiClient.ico", StringComparison.OrdinalIgnoreCase)
-                );
-
-                if (!string.IsNullOrEmpty(resourceName))
-                {
-                    using (Stream stream = assembly.GetManifestResourceStream(resourceName))
-                    {
-                        if (stream != null) return new Icon(stream);
-                    }
-                }
-            }
-            catch { }
-
-            return SystemIcons.Application;
         }
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
