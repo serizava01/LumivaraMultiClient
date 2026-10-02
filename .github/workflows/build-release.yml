@@ -33,7 +33,6 @@ jobs:
         run: |
           Compress-Archive -Path ${{ github.workspace }}\output\* -DestinationPath LumivaraMultiClient.zip
 
-      # 4. สร้าง Release และแนบไฟล์ .zip
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
