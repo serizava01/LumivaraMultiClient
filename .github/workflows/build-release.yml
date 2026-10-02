@@ -27,12 +27,18 @@ jobs:
 
       - name: Build Project
         run: msbuild LumivaraMultiClient.slnx /p:Configuration=Release /p:OutputPath=${{ github.workspace }}\output
-        
+
+      - name: Copy External Assets
+        shell: pwsh
+        run: |
+          # คัดลอกไฟล์ .ico ทั้งหมดที่มีใน repository เข้าไปไว้ในโฟลเดอร์ output
+          Get-ChildItem -Path . -Recurse -Filter "*.ico" | Copy-Item -Destination ${{ github.workspace }}\output -Force
+
       - name: Zip Output
         shell: pwsh
         run: |
           Compress-Archive -Path ${{ github.workspace }}\output\* -DestinationPath LumivaraMultiClient.zip
-          
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
