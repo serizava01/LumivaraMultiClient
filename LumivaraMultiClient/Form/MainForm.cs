@@ -107,7 +107,7 @@ namespace LumivaraMultiClient.Forms
             topMenuPanel.Controls.Add(Wiki);
             topMenuPanel.Controls.Add(Updates);
             topMenuPanel.Controls.Add(Github);
-            topMenuPanel.Controls.Add(LinkFB);
+          
 
             tabControl = new TabControl { Dock = DockStyle.Fill };
             tabControl.MouseClick += TabControl_MouseClick;
