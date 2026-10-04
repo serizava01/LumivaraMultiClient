@@ -84,21 +84,21 @@ namespace LumivaraMultiClient.Forms
             };
             Updates.Click += (s, e) => LinkStart("https://lumivaraonline.com/changelog/");
             
-            Button LinkFB = new Button
-            {
-                Text = "เฟสบุคพัฒนา",
-                Width = 100,
-                Height = 30,
-                Location = new Point(480, 5)
-            };
-            LinkFB.Click += (s, e) => LinkStart("https://www.facebook.com/PLAMSsE/");
+            //Button LinkFB = new Button
+            //{
+            //    Text = "เฟสบุคพัฒนา",
+            //    Width = 100,
+            //    Height = 30,
+            //    Location = new Point(480, 5)
+            //};
+            //LinkFB.Click += (s, e) => LinkStart("https://www.facebook.com/PLAMSsE/");
 
             Button Github = new Button
             {
                 Text = "GitHubผู้พัฒนา",
                 Width = 100,
                 Height = 30,
-                Location = new Point(590, 5)
+                Location = new Point(480, 5)
             };
             Github.Click += (s, e) => LinkStart("https://github.com/serizava01");
 
