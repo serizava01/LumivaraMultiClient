@@ -17,7 +17,7 @@ namespace LumivaraMultiClient.Controls
         private Button btnRefresh;
 
         private bool isInitializing = false;
-
+        
         public GameTabControl(AccountProfile profile)
         {
             Profile = profile;
