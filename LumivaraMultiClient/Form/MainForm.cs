@@ -1,7 +1,6 @@
 ﻿using LumivaraMultiClient.Controls;
 using LumivaraMultiClient.Models;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -13,481 +12,1888 @@ namespace LumivaraMultiClient.Forms
 {
     public partial class MainForm : Form
     {
-        private TabControl tabControl;
-        private Panel topMenuPanel;
-        private ContextMenuStrip tabContextMenu;
+        // =========================================================
+        // Settings
+        // =========================================================
 
-        private CheckBox chkClient1;
-        private CheckBox chkClient2;
-        private CheckBox chkClient3;
+        private const int MaxClients = 20;
 
-        private Label lblStatus1;
-        private Label lblStatus2;
-        private Label lblStatus3;
+        // =========================================================
+        // Client Data
+        // =========================================================
 
-        private bool isInitializing = true;
+        private readonly Dictionary<string, GameTabControl> runningClients =
+            new Dictionary<string, GameTabControl>();
 
-        // ระบบ Tray Icon
+        private readonly Dictionary<string, Panel> clientItems =
+            new Dictionary<string, Panel>();
+
+        private readonly Dictionary<string, Label> clientStatusLabels =
+            new Dictionary<string, Label>();
+
+        private readonly Dictionary<string, AccountProfile> profiles =
+            new Dictionary<string, AccountProfile>();
+
+        private string selectedProfileId = null;
+
+        // =========================================================
+        // Main UI
+        // =========================================================
+
+        private Panel headerPanel;
+        private Panel sidebarPanel;
+        private Panel contentPanel;
+        private Panel footerPanel;
+
+        private FlowLayoutPanel clientListPanel;
+
+        private Label lblSelectedClient;
+        private Label lblRunningCount;
+
+        private Button btnAddClient;
+        private Button btnHideToTray;
+        private Button btnWiki;
+        private Button btnUpdates;
+        private Button btnGithub;
+
+        // =========================================================
+        // Context Menu
+        // =========================================================
+
+        private ContextMenuStrip clientContextMenu;
+
+        // =========================================================
+        // Tray
+        // =========================================================
+
         private NotifyIcon trayIcon;
         private ContextMenuStrip trayMenu;
 
+        // =========================================================
+        // Config
+        // =========================================================
+
         private readonly string basePath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData),
             "LumivaraMultiClient"
         );
 
-        private string ConfigFilePath => Path.Combine(basePath, "config.txt");
+        private string ConfigFilePath
+        {
+            get
+            {
+                return Path.Combine(
+                    basePath,
+                    "config.txt"
+                );
+            }
+        }
+
+        // =========================================================
+        // Constructor
+        // =========================================================
 
         public MainForm()
         {
             InitializeComponent();
+
             InitializeMainUI();
             InitializeContextMenu();
             InitializeTrayIcon();
+
+            CreateClientList();
             LoadSavedInstances();
         }
 
+        // =========================================================
+        // Main UI
+        // =========================================================
+
         private void InitializeMainUI()
         {
-            this.Text = "Lumivara Online - Multi Client Manager";
-            this.Size = new Size(1280, 800);
-            this.StartPosition = FormStartPosition.CenterScreen;
+            Text =
+                "Lumivara Online - Multi Client Manager";
 
-            topMenuPanel = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Color.FromArgb(240, 240, 240) };
+            Size =
+                new Size(
+                    1280,
+                    800
+                );
 
-            // Client 1 Group
-            lblStatus1 = new Label
+            MinimumSize =
+                new Size(
+                    900,
+                    600
+                );
+
+            StartPosition =
+                FormStartPosition.CenterScreen;
+
+            // =====================================================
+            // HEADER
+            // =====================================================
+
+            headerPanel = new Panel
             {
-                Text = "●",
+                Dock = DockStyle.Top,
+                Height = 45,
+                BackColor = Color.FromArgb(
+                    240,
+                    240,
+                    240
+                )
+            };
+
+            lblSelectedClient = new Label
+            {
+                Text =
+                    "ยังไม่ได้เลือก Client",
+
                 AutoSize = true,
-                Location = new Point(8, 10),
-                Font = new Font("Segoe UI Symbol", 10f),
-                ForeColor = Color.Red
-            };
-            chkClient1 = new CheckBox { Text = "Client 1", AutoSize = true, Location = new Point(30, 8), Tag = "Lumivara_Acc_1" };
 
-            // Client 2 Group
-            lblStatus2 = new Label
+                Location =
+                    new Point(
+                        15,
+                        13
+                    ),
+
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        10f,
+                        FontStyle.Bold
+                    )
+            };
+
+            lblRunningCount = new Label
             {
-                Text = "●",
+                Text =
+                    "Running: 0",
+
                 AutoSize = true,
-                Location = new Point(118, 10),
-                Font = new Font("Segoe UI Symbol", 10f),
-                ForeColor = Color.Red
+
+                Location =
+                    new Point(
+                        200,
+                        13
+                    ),
+
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        9f
+                    ),
+
+                ForeColor =
+                    Color.DimGray
             };
-            chkClient2 = new CheckBox { Text = "Client 2", AutoSize = true, Location = new Point(140, 8), Tag = "Lumivara_Acc_2" };
 
-            // Client 3 Group
-            lblStatus3 = new Label
+            headerPanel.Controls.Add(
+                lblSelectedClient
+            );
+
+            headerPanel.Controls.Add(
+                lblRunningCount
+            );
+
+            // =====================================================
+            // SIDEBAR
+            // =====================================================
+
+            sidebarPanel = new Panel
             {
-                Text = "●",
-                AutoSize = true,
-                Location = new Point(228, 10),
-                Font = new Font("Segoe UI Symbol", 10f),
-                ForeColor = Color.Red
+                Dock = DockStyle.Left,
+
+                Width = 220,
+
+                BackColor =
+                    Color.FromArgb(
+                        35,
+                        35,
+                        35
+                    )
             };
-            chkClient3 = new CheckBox { Text = "Client 3", AutoSize = true, Location = new Point(250, 8), Tag = "Lumivara_Acc_3" };
 
-            // ผูก Event การติ๊ก
-            chkClient1.CheckedChanged += ClientCheckBox_CheckedChanged;
-            chkClient2.CheckedChanged += ClientCheckBox_CheckedChanged;
-            chkClient3.CheckedChanged += ClientCheckBox_CheckedChanged;
+            // =====================================================
+            // CLIENT HEADER
+            // =====================================================
 
-            Button btnHideToTray = new Button
+            Label lblClients = new Label
             {
-                Text = "ซ่อนไปยัง Tray",
-                Width = 100,
+                Text = "CLIENTS",
+
+                Dock = DockStyle.Top,
+
+                Height = 40,
+
+                Padding =
+                    new Padding(
+                        15,
+                        12,
+                        0,
+                        0
+                    ),
+
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        9f,
+                        FontStyle.Bold
+                    ),
+
+                ForeColor =
+                    Color.White,
+
+                BackColor =
+                    Color.FromArgb(
+                        35,
+                        35,
+                        35
+                    )
+            };
+
+            // =====================================================
+            // CLIENT LIST
+            // =====================================================
+
+            clientListPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+
+                FlowDirection =
+                    FlowDirection.TopDown,
+
+                WrapContents = false,
+
+                AutoScroll = true,
+
+                Padding =
+                    new Padding(
+                        5
+                    ),
+
+                BackColor =
+                    Color.FromArgb(
+                        35,
+                        35,
+                        35
+                    )
+            };
+
+            // =====================================================
+            // BOTTOM BUTTON PANEL
+            // =====================================================
+
+            Panel bottomButtonPanel = new Panel
+            {
+                Dock = DockStyle.Bottom,
+
+                Height = 210,
+
+                BackColor =
+                    Color.FromArgb(
+                        35,
+                        35,
+                        35
+                    )
+            };
+
+            // =====================================================
+            // ADD CLIENT
+            // =====================================================
+
+            btnAddClient = CreateSidebarButton(
+                "+ เพิ่ม Client"
+            );
+
+            btnAddClient.Location =
+                new Point(
+                    5,
+                    5
+                );
+
+            btnAddClient.Click += delegate
+            {
+                AddNewClient();
+            };
+
+            // =====================================================
+            // HIDE TRAY
+            // =====================================================
+
+            btnHideToTray = CreateSidebarButton(
+                "ซ่อนไปยัง Tray"
+            );
+
+            btnHideToTray.Location =
+                new Point(
+                    5,
+                    5
+                );
+
+            btnHideToTray.Click += delegate
+            {
+                HideToSystemTray();
+            };
+
+            // =====================================================
+            // WIKI
+            // =====================================================
+
+            btnWiki = CreateSidebarButton(
+                "Wiki"
+            );
+
+            btnWiki.Location =
+                new Point(
+                    5,
+                    45
+                );
+
+            btnWiki.Click += delegate
+            {
+                LinkStart(
+                    "https://lumivaraonline.com/wiki/#overview"
+                );
+            };
+
+            // =====================================================
+            // UPDATE
+            // =====================================================
+
+            btnUpdates = CreateSidebarButton(
+                "Update"
+            );
+
+            btnUpdates.Location =
+                new Point(
+                    5,
+                    85
+                );
+
+            btnUpdates.Click += delegate
+            {
+                LinkStart(
+                    "https://lumivaraonline.com/changelog/"
+                );
+            };
+
+            // =====================================================
+            // GITHUB
+            // =====================================================
+
+            btnGithub = CreateSidebarButton(
+                "GitHub"
+            );
+
+            btnGithub.Location =
+                new Point(
+                    5,
+                    125
+                );
+
+            btnGithub.Click += delegate
+            {
+                LinkStart(
+                    "https://github.com/serizava01"
+                );
+            };
+
+            // =====================================================
+            // ADD BUTTONS TO BOTTOM PANEL
+            // =====================================================
+
+            //bottomButtonPanel.Controls.Add(
+            //    btnAddClient
+            //);
+
+            bottomButtonPanel.Controls.Add(
+                btnHideToTray
+            );
+
+            bottomButtonPanel.Controls.Add(
+                btnWiki
+            );
+
+            bottomButtonPanel.Controls.Add(
+                btnUpdates
+            );
+
+            bottomButtonPanel.Controls.Add(
+                btnGithub
+            );
+
+            sidebarPanel.Controls.Add(
+                clientListPanel
+            );
+
+            sidebarPanel.Controls.Add(
+                bottomButtonPanel
+            );
+
+            sidebarPanel.Controls.Add(
+                lblClients
+            );
+
+            // =====================================================
+            // CONTENT
+            // =====================================================
+
+            contentPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+
+                BackColor =
+                    Color.FromArgb(
+                        20,
+                        20,
+                        20
+                    )
+            };
+
+            ShowEmptyContent();
+
+            // =====================================================
+            // FOOTER
+            // =====================================================
+
+            footerPanel = new Panel
+            {
+                Dock = DockStyle.Bottom,
+
                 Height = 28,
-                Location = new Point(350, 6)
+
+                BackColor =
+                    Color.FromArgb(
+                        240,
+                        240,
+                        240
+                    )
             };
-            btnHideToTray.Click += (s, e) => HideToSystemTray();
 
-            Button Wiki = new Button
-            {
-                Text = "ดู Wiki",
-                Width = 75,
-                Height = 28,
-                Location = new Point(460, 6)
-            };
-            Wiki.Click += (s, e) => LinkStart("https://lumivaraonline.com/wiki/#overview");
+            // =====================================================
+            // ADD TO FORM
+            // =====================================================
 
-            Button Updates = new Button
-            {
-                Text = "เช็คอัพเดต",
-                Width = 85,
-                Height = 28,
-                Location = new Point(545, 6)
-            };
-            Updates.Click += (s, e) => LinkStart("https://lumivaraonline.com/changelog/");
+            Controls.Add(
+                contentPanel
+            );
 
-            Button Github = new Button
-            {
-                Text = "GitHubผู้พัฒนา",
-                Width = 100,
-                Height = 28,
-                Location = new Point(640, 6)
-            };
-            Github.Click += (s, e) => LinkStart("https://github.com/serizava01");
+            Controls.Add(
+                sidebarPanel
+            );
 
-            topMenuPanel.Controls.Add(lblStatus1);
-            topMenuPanel.Controls.Add(chkClient1);
-            topMenuPanel.Controls.Add(lblStatus2);
-            topMenuPanel.Controls.Add(chkClient2);
-            topMenuPanel.Controls.Add(lblStatus3);
-            topMenuPanel.Controls.Add(chkClient3);
-            topMenuPanel.Controls.Add(btnHideToTray);
-            topMenuPanel.Controls.Add(Wiki);
-            topMenuPanel.Controls.Add(Updates);
-            topMenuPanel.Controls.Add(Github);
+            Controls.Add(
+                footerPanel
+            );
 
-            tabControl = new TabControl { Dock = DockStyle.Fill };
-            tabControl.MouseClick += TabControl_MouseClick;
-
-            EnsureAllTabsExist();
-
-            this.Controls.Add(tabControl);
-            this.Controls.Add(topMenuPanel);
+            Controls.Add(
+                headerPanel
+            );
         }
 
-        private void EnsureAllTabsExist()
-        {
-            CreateTabSkeleton("Lumivara_Acc_1", "Client 1");
-            CreateTabSkeleton("Lumivara_Acc_2", "Client 2");
-            CreateTabSkeleton("Lumivara_Acc_3", "Client 3");
-        }
+        // =========================================================
+        // Create Sidebar Button
+        // =========================================================
 
-        private void CreateTabSkeleton(string profileId, string title)
+        private Button CreateSidebarButton(
+            string text)
         {
-            var profile = new AccountProfile
+            Button button = new Button
             {
-                ProfileId = profileId,
-                Title = title,
-                TargetUrl = "https://lumivaraonline.com/"
+                Text = text,
+
+                Width = 210,
+
+                Height = 35,
+
+                FlatStyle =
+                    FlatStyle.Flat,
+
+                ForeColor =
+                    Color.White,
+
+                BackColor =
+                    Color.FromArgb(
+                        55,
+                        55,
+                        55
+                    ),
+
+                Cursor =
+                    Cursors.Hand,
+
+                UseVisualStyleBackColor = false
             };
 
-            var tabPage = new TabPage(profile.Title)
-            {
-                Tag = profile
-            };
+            button.FlatAppearance.BorderSize = 0;
 
-            tabControl.TabPages.Add(tabPage);
+            return button;
         }
 
-        private void ClientCheckBox_CheckedChanged(object sender, EventArgs e)
-        {
-            if (isInitializing) return;
+        // =========================================================
+        // Empty Content
+        // =========================================================
 
-            if (sender is CheckBox chk && chk.Tag is string profileId)
+        private void ShowEmptyContent()
+        {
+            contentPanel.Controls.Clear();
+
+            Label label = new Label
             {
-                if (chk.Checked)
+                Text =
+                    "เลือก Client จากด้านซ้าย",
+
+                Dock =
+                    DockStyle.Fill,
+
+                TextAlign =
+                    ContentAlignment.MiddleCenter,
+
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        14f
+                    ),
+
+                ForeColor =
+                    Color.Gray,
+
+                BackColor =
+                    Color.FromArgb(
+                        20,
+                        20,
+                        20
+                    )
+            };
+
+            contentPanel.Controls.Add(
+                label
+            );
+        }
+
+        // =========================================================
+        // Create Client List
+        // =========================================================
+
+        private void CreateClientList()
+        {
+            for (
+                int i = 1;
+                i <= MaxClients;
+                i++)
+            {
+                string profileId =
+                    "Lumivara_Acc_" + i;
+
+                string title =
+                    "Client " + i;
+
+                AccountProfile profile =
+                    new AccountProfile
+                    {
+                        ProfileId =
+                            profileId,
+
+                        Title =
+                            title,
+
+                        TargetUrl =
+                            "https://lumivaraonline.com/"
+                    };
+
+                profiles[profileId] =
+                    profile;
+
+                CreateClientItem(
+                    profile
+                );
+            }
+        }
+
+        // =========================================================
+        // Create Client Item
+        // =========================================================
+
+        private void CreateClientItem(
+            AccountProfile profile)
+        {
+            Panel item = new Panel
+            {
+                Width = 195,
+
+                Height = 55,
+
+                Margin =
+                    new Padding(
+                        0,
+                        0,
+                        0,
+                        4
+                    ),
+
+                BackColor =
+                    Color.FromArgb(
+                        45,
+                        45,
+                        45
+                    ),
+
+                Cursor =
+                    Cursors.Hand,
+
+                Tag =
+                    profile.ProfileId
+            };
+
+            Label status = new Label
+            {
+                Text = "●",
+
+                AutoSize = true,
+
+                Location =
+                    new Point(
+                        10,
+                        17
+                    ),
+
+                Font =
+                    new Font(
+                        "Segoe UI Symbol",
+                        11f
+                    ),
+
+                ForeColor =
+                    Color.Red,
+
+                Cursor =
+                    Cursors.Hand,
+
+                Tag = item
+            };
+
+            Label title = new Label
+            {
+                Text =
+                    profile.Title,
+
+                AutoSize = true,
+
+                Location =
+                    new Point(
+                        35,
+                        10
+                    ),
+
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        9.5f,
+                        FontStyle.Bold
+                    ),
+
+                ForeColor =
+                    Color.White,
+
+                Cursor =
+                    Cursors.Hand,
+
+                Tag = item
+            };
+
+            Label state = new Label
+            {
+                Text =
+                    "Stopped",
+
+                AutoSize = true,
+
+                Location =
+                    new Point(
+                        35,
+                        30
+                    ),
+
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        8f
+                    ),
+
+                ForeColor =
+                    Color.Silver,
+
+                Cursor =
+                    Cursors.Hand,
+
+                Tag = item
+            };
+
+            item.Controls.Add(
+                status
+            );
+
+            item.Controls.Add(
+                title
+            );
+
+            item.Controls.Add(
+                state
+            );
+
+            clientItems[
+                profile.ProfileId
+            ] = item;
+
+            clientStatusLabels[
+                profile.ProfileId
+            ] = status;
+
+            // =====================================================
+            // Parent Panel Events
+            // =====================================================
+
+            item.Click +=
+                ClientItem_Click;
+
+            item.DoubleClick +=
+                ClientItem_DoubleClick;
+
+            item.MouseUp +=
+                ClientItem_MouseUp;
+            status.Click +=
+                ClientChild_Click;
+
+            title.Click +=
+                ClientChild_Click;
+
+            state.Click +=
+                ClientChild_Click;
+
+            status.DoubleClick +=
+                ClientChild_DoubleClick;
+
+            title.DoubleClick +=
+                ClientChild_DoubleClick;
+
+            state.DoubleClick +=
+                ClientChild_DoubleClick;
+
+            status.MouseUp +=
+                ClientChild_MouseUp;
+
+            title.MouseUp +=
+                ClientChild_MouseUp;
+
+            state.MouseUp +=
+                ClientChild_MouseUp;
+
+            clientListPanel.Controls.Add(
+                item
+            );
+        }
+
+        // =========================================================
+        // Get Parent Client Item
+        // =========================================================
+
+        private Panel GetClientItemFromControl(
+            Control control)
+        {
+            if (control == null)
+                return null;
+
+            Panel item =
+                control.Tag as Panel;
+
+            if (item != null)
+                return item;
+
+            return control.Parent as Panel;
+        }
+
+        // =========================================================
+        // Child Click
+        // =========================================================
+
+        private void ClientChild_Click(
+            object sender,
+            EventArgs e)
+        {
+            Control control =
+                sender as Control;
+
+            Panel item =
+                GetClientItemFromControl(
+                    control
+                );
+
+            if (item == null)
+                return;
+
+            SelectClientFromPanel(
+                item
+            );
+        }
+
+        // =========================================================
+        // Child Double Click
+        // =========================================================
+
+        private void ClientChild_DoubleClick(
+            object sender,
+            EventArgs e)
+        {
+            Control control =
+                sender as Control;
+
+            Panel item =
+                GetClientItemFromControl(
+                    control
+                );
+
+            if (item == null)
+                return;
+
+            StartClientFromPanel(
+                item
+            );
+        }
+
+        // =========================================================
+        // Child Right Click
+        // =========================================================
+
+        private void ClientChild_MouseUp(
+            object sender,
+            MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
+                return;
+
+            Control control =
+                sender as Control;
+
+            Panel item =
+                GetClientItemFromControl(
+                    control
+                );
+
+            if (item == null)
+                return;
+
+            SelectClientFromPanel(
+                item
+            );
+
+            clientContextMenu.Show(
+                control,
+                e.Location
+            );
+        }
+
+        // =========================================================
+        // Single Click
+        // =========================================================
+
+        private void ClientItem_Click(
+            object sender,
+            EventArgs e)
+        {
+            Panel item =
+                sender as Panel;
+
+            if (item == null)
+                return;
+
+            SelectClientFromPanel(
+                item
+            );
+        }
+
+        // =========================================================
+        // Double Click
+        // =========================================================
+
+        private void ClientItem_DoubleClick(
+            object sender,
+            EventArgs e)
+        {
+            Panel item =
+                sender as Panel;
+
+            if (item == null)
+                return;
+
+            StartClientFromPanel(
+                item
+            );
+        }
+
+        // =========================================================
+        // Select Client From Panel
+        // =========================================================
+
+        private void SelectClientFromPanel(
+            Panel item)
+        {
+            if (item == null)
+                return;
+
+            string profileId =
+                item.Tag as string;
+
+            if (string.IsNullOrEmpty(profileId))
+                return;
+
+            SelectClient(
+                profileId
+            );
+        }
+
+        // =========================================================
+        // Start Client From Panel
+        // =========================================================
+
+        private void StartClientFromPanel(
+            Panel item)
+        {
+            if (item == null)
+                return;
+
+            string profileId =
+                item.Tag as string;
+
+            if (string.IsNullOrEmpty(profileId))
+                return;
+
+            if (runningClients.ContainsKey(
+                profileId))
+            {
+                SelectClient(
+                    profileId
+                );
+
+                return;
+            }
+
+            StartClientInstance(
+                profileId
+            );
+        }
+
+        // =========================================================
+        // Right Click
+        // =========================================================
+
+        private void ClientItem_MouseUp(
+            object sender,
+            MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
+                return;
+
+            Panel item =
+                sender as Panel;
+
+            if (item == null)
+                return;
+
+            SelectClientFromPanel(
+                item
+            );
+
+            clientContextMenu.Show(
+                item,
+                e.Location
+            );
+        }
+
+        // =========================================================
+        // Select Client
+        // =========================================================
+
+        private void SelectClient(
+            string profileId)
+        {
+            if (!profiles.ContainsKey(
+                profileId))
+                return;
+
+            selectedProfileId =
+                profileId;
+
+            foreach (
+                KeyValuePair<
+                    string,
+                    Panel> pair
+                in clientItems)
+            {
+                if (pair.Key == profileId)
                 {
-                    StartClientInstance(profileId);
-                    UpdateStatusIcon(profileId, true);
+                    pair.Value.BackColor =
+                        Color.FromArgb(
+                            70,
+                            70,
+                            70
+                        );
                 }
                 else
                 {
-                    StopClientInstance(profileId);
-                    UpdateStatusIcon(profileId, false);
+                    pair.Value.BackColor =
+                        Color.FromArgb(
+                            45,
+                            45,
+                            45
+                        );
                 }
+            }
+
+            AccountProfile profile =
+                profiles[profileId];
+
+            lblSelectedClient.Text =
+                profile.Title;
+
+            ShowClientGame(
+                profileId
+            );
+        }
+
+        // =========================================================
+        // Show Client Game
+        // =========================================================
+
+        private void ShowClientGame(
+            string profileId)
+        {
+            contentPanel.SuspendLayout();
+
+            try
+            {
+                contentPanel.Controls.Clear();
+
+                if (!runningClients.ContainsKey(
+                    profileId))
+                {
+                    Label label = new Label
+                    {
+                        Text =
+                            "Client ยังไม่ได้เปิด\n\n" +
+                            "ดับเบิลคลิก Client เพื่อเปิด",
+
+                        Dock =
+                            DockStyle.Fill,
+
+                        TextAlign =
+                            ContentAlignment.MiddleCenter,
+
+                        ForeColor =
+                            Color.Gray,
+
+                        BackColor =
+                            Color.FromArgb(
+                                20,
+                                20,
+                                20
+                            ),
+
+                        Font =
+                            new Font(
+                                "Segoe UI",
+                                12f
+                            )
+                    };
+
+                    contentPanel.Controls.Add(
+                        label
+                    );
+
+                    return;
+                }
+
+                GameTabControl gameControl =
+                    runningClients[profileId];
+
+                gameControl.Dock =
+                    DockStyle.Fill;
+
+                if (gameControl.Parent !=
+                    contentPanel)
+                {
+                    contentPanel.Controls.Add(
+                        gameControl
+                    );
+                }
+
+                gameControl.BringToFront();
+            }
+            finally
+            {
+                contentPanel.ResumeLayout();
+            }
+        }
+
+        // =========================================================
+        // Start Client
+        // =========================================================
+
+        private void StartClientInstance(
+            string profileId)
+        {
+            if (!profiles.ContainsKey(
+                profileId))
+                return;
+
+            if (runningClients.ContainsKey(
+                profileId))
+            {
+                SelectClient(
+                    profileId
+                );
+
+                return;
+            }
+
+            AccountProfile profile =
+                profiles[profileId];
+
+            try
+            {
+                GameTabControl gameControl =
+                    new GameTabControl(
+                        profile
+                    );
+
+                gameControl.Dock =
+                    DockStyle.Fill;
+
+                runningClients.Add(
+                    profileId,
+                    gameControl
+                );
+
+                UpdateClientStatus(
+                    profileId,
+                    true
+                );
+
+                SelectClient(
+                    profileId
+                );
+
+                UpdateAppTitle();
 
                 SaveConfig();
-                UpdateAppTitle();
             }
-        }
-
-        private void StartClientInstance(string profileId)
-        {
-            TabPage page = GetTabPageByProfileId(profileId);
-            if (page != null && page.Controls.Count == 0)
+            catch (Exception ex)
             {
-                if (page.Tag is AccountProfile profile)
-                {
-                    var gameControl = new GameTabControl(profile);
-                    page.Controls.Add(gameControl);
-                    tabControl.SelectedTab = page;
-                }
+                MessageBox.Show(
+                    "ไม่สามารถเปิด " +
+                    profile.Title +
+                    " ได้\n\n" +
+                    ex.Message,
+
+                    "Start Client Error",
+
+                    MessageBoxButtons.OK,
+
+                    MessageBoxIcon.Error
+                );
             }
         }
 
-        private void StopClientInstance(string profileId)
+        // =========================================================
+        // Stop Client
+        // =========================================================
+
+        private void StopClientInstance(
+            string profileId)
         {
-            TabPage page = GetTabPageByProfileId(profileId);
-            if (page != null && page.Controls.Count > 0)
+            if (!runningClients.ContainsKey(
+                profileId))
+                return;
+
+            GameTabControl gameControl =
+                runningClients[profileId];
+
+            if (gameControl.Parent ==
+                contentPanel)
             {
-                if (page.Controls[0] is GameTabControl gameControl)
-                {
-                    gameControl.WebView?.Dispose();
-                }
-                page.Controls.Clear();
+                contentPanel.Controls.Remove(
+                    gameControl
+                );
             }
-        }
-
-        private TabPage GetTabPageByProfileId(string profileId)
-        {
-            foreach (TabPage page in tabControl.TabPages)
+            try
             {
-                if (page.Tag is AccountProfile profile && profile.ProfileId == profileId)
-                {
-                    return page;
-                }
+                gameControl.Dispose();
             }
-            return null;
+            catch
+            {
+            }
+
+            runningClients.Remove(
+                profileId
+            );
+
+            UpdateClientStatus(
+                profileId,
+                false
+            );
+
+            if (selectedProfileId ==
+                profileId)
+            {
+                selectedProfileId =
+                    null;
+
+                lblSelectedClient.Text =
+                    "ยังไม่ได้เลือก Client";
+
+                ShowEmptyContent();
+            }
+
+            UpdateAppTitle();
+
+            SaveConfig();
         }
 
-        private void UpdateStatusIcon(string profileId, bool isActive)
+        // =========================================================
+        // Update Client Status
+        // =========================================================
+
+        private void UpdateClientStatus(
+            string profileId,
+            bool active)
         {
-            Color statusColor = isActive ? Color.LimeGreen : Color.Red;
+            if (!clientStatusLabels.ContainsKey(
+                profileId))
+                return;
 
-            if (profileId == "Lumivara_Acc_1") lblStatus1.ForeColor = statusColor;
-            else if (profileId == "Lumivara_Acc_2") lblStatus2.ForeColor = statusColor;
-            else if (profileId == "Lumivara_Acc_3") lblStatus3.ForeColor = statusColor;
+            Label status =
+                clientStatusLabels[
+                    profileId
+                ];
+
+            status.ForeColor =
+                active
+                    ? Color.LimeGreen
+                    : Color.Red;
+
+            if (!clientItems.ContainsKey(
+                profileId))
+                return;
+
+            Panel item =
+                clientItems[
+                    profileId
+                ];
+
+            if (item.Controls.Count < 3)
+                return;
+
+            Label state =
+                item.Controls[2]
+                as Label;
+
+            if (state != null)
+            {
+                state.Text =
+                    active
+                        ? "Running"
+                        : "Stopped";
+            }
         }
+
+        // =========================================================
+        // Context Menu
+        // =========================================================
+
+        private void InitializeContextMenu()
+        {
+            clientContextMenu =
+                new ContextMenuStrip();
+
+            ToolStripMenuItem startItem =
+                new ToolStripMenuItem(
+                    "เปิด Client"
+                );
+
+            startItem.Click += delegate
+            {
+                if (!string.IsNullOrEmpty(
+                    selectedProfileId))
+                {
+                    StartClientInstance(
+                        selectedProfileId
+                    );
+                }
+            };
+
+            ToolStripMenuItem stopItem =
+                new ToolStripMenuItem(
+                    "ปิด Client"
+                );
+
+            stopItem.Click += delegate
+            {
+                if (!string.IsNullOrEmpty(
+                    selectedProfileId))
+                {
+                    StopClientInstance(
+                        selectedProfileId
+                    );
+                }
+            };
+
+            ToolStripSeparator separator =
+                new ToolStripSeparator();
+
+            ToolStripMenuItem deleteItem =
+                new ToolStripMenuItem(
+                    "ลบข้อมูลล็อกอินของจอนี้"
+                );
+
+            deleteItem.Click +=
+                DeleteSelectedClient_Click;
+
+            clientContextMenu.Items.Add(
+                startItem
+            );
+
+            clientContextMenu.Items.Add(
+                stopItem
+            );
+
+            clientContextMenu.Items.Add(
+                separator
+            );
+
+            clientContextMenu.Items.Add(
+                deleteItem
+            );
+        }
+
+        // =========================================================
+        // Delete Client Data
+        // =========================================================
+
+        private void DeleteSelectedClient_Click(
+            object sender,
+            EventArgs e)
+        {
+            if (string.IsNullOrEmpty(
+                selectedProfileId))
+                return;
+
+            if (!profiles.ContainsKey(
+                selectedProfileId))
+                return;
+
+            AccountProfile profile =
+                profiles[
+                    selectedProfileId
+                ];
+
+            DialogResult result =
+                MessageBox.Show(
+                    "แน่ใจว่าต้องการลบข้อมูลล็อกอินของ " +
+                    profile.Title +
+                    " หรือไม่?",
+
+                    "ยืนยันการลบข้อมูล",
+
+                    MessageBoxButtons.YesNo,
+
+                    MessageBoxIcon.Warning
+                );
+
+            if (result !=
+                DialogResult.Yes)
+                return;
+
+            StopClientInstance(
+                profile.ProfileId
+            );
+
+            DeleteProfileDataFolder(
+                profile.ProfileId
+            );
+
+            SaveConfig();
+        }
+
+        // =========================================================
+        // Delete Profile Folder
+        // =========================================================
+
+        private void DeleteProfileDataFolder(
+            string profileId)
+        {
+            string profileFolder =
+                Path.Combine(
+                    basePath,
+                    "Profiles",
+                    profileId
+                );
+
+            if (!Directory.Exists(
+                profileFolder))
+                return;
+
+            try
+            {
+                Directory.Delete(
+                    profileFolder,
+                    true
+                );
+            }
+            catch
+            {
+                Task.Run(async delegate
+                {
+                    await Task.Delay(
+                        2000
+                    );
+
+                    try
+                    {
+                        if (Directory.Exists(
+                            profileFolder))
+                        {
+                            Directory.Delete(
+                                profileFolder,
+                                true
+                            );
+                        }
+                    }
+                    catch
+                    {
+                    }
+                });
+            }
+        }
+
+        // =========================================================
+        // Add Client
+        // =========================================================
+
+        private void AddNewClient()
+        {
+            MessageBox.Show(
+                "ตอนนี้ระบบเตรียม Client ไว้ " +
+                MaxClients +
+                " จอแล้ว\n\n" +
+                "สามารถดับเบิลคลิก Client ที่ต้องการเพื่อเปิดได้เลย",
+
+                "Client Manager",
+
+                MessageBoxButtons.OK,
+
+                MessageBoxIcon.Information
+            );
+        }
+
+        // =========================================================
+        // Load Config
+        // =========================================================
 
         private void LoadSavedInstances()
         {
-            isInitializing = true;
+            List<string> activeProfiles =
+                new List<string>();
 
-            var activeProfiles = new List<string>();
-            if (File.Exists(ConfigFilePath))
+            if (File.Exists(
+                ConfigFilePath))
             {
-                string[] lines = File.ReadAllLines(ConfigFilePath);
-                if (lines.Length == 1 && int.TryParse(lines[0].Trim(), out int count))
+                try
                 {
-                    for (int i = 1; i <= Math.Min(count, 3); i++)
+                    string[] lines =
+                        File.ReadAllLines(
+                            ConfigFilePath
+                        );
+
+                    foreach (
+                        string line
+                        in lines)
                     {
-                        activeProfiles.Add("Lumivara_Acc_" + i);
+                        string profileId =
+                            line.Trim();
+
+                        if (string.IsNullOrEmpty(
+                            profileId))
+                            continue;
+
+                        if (!profiles.ContainsKey(
+                            profileId))
+                            continue;
+
+                        if (!activeProfiles.Contains(
+                            profileId))
+                        {
+                            activeProfiles.Add(
+                                profileId
+                            );
+                        }
                     }
                 }
-                else
+                catch
                 {
-                    foreach (string line in lines)
-                    {
-                        string pId = line.Trim();
-                        if (!string.IsNullOrEmpty(pId)) activeProfiles.Add(pId);
-                    }
                 }
             }
+
+            // =====================================================
+            // ไม่มี Config
+            // เปิด Client 1 เป็นค่าเริ่มต้น
+            // =====================================================
 
             if (activeProfiles.Count == 0)
             {
-                activeProfiles.Add("Lumivara_Acc_1");
+                activeProfiles.Add(
+                    "Lumivara_Acc_1"
+                );
             }
 
-            chkClient1.Checked = activeProfiles.Contains("Lumivara_Acc_1");
-            chkClient2.Checked = activeProfiles.Contains("Lumivara_Acc_2");
-            chkClient3.Checked = activeProfiles.Contains("Lumivara_Acc_3");
+            foreach (
+                string profileId
+                in activeProfiles)
+            {
+                StartClientInstance(
+                    profileId
+                );
+            }
 
-            if (chkClient1.Checked) { StartClientInstance("Lumivara_Acc_1"); UpdateStatusIcon("Lumivara_Acc_1", true); }
-            else UpdateStatusIcon("Lumivara_Acc_1", false);
-
-            if (chkClient2.Checked) { StartClientInstance("Lumivara_Acc_2"); UpdateStatusIcon("Lumivara_Acc_2", true); }
-            else UpdateStatusIcon("Lumivara_Acc_2", false);
-
-            if (chkClient3.Checked) { StartClientInstance("Lumivara_Acc_3"); UpdateStatusIcon("Lumivara_Acc_3", true); }
-            else UpdateStatusIcon("Lumivara_Acc_3", false);
-
-            isInitializing = false;
             SaveConfig();
-            UpdateAppTitle();
         }
+
+        // =========================================================
+        // Save Config
+        // =========================================================
 
         private void SaveConfig()
         {
             try
             {
-                if (!Directory.Exists(basePath)) Directory.CreateDirectory(basePath);
-
-                var activeProfiles = new List<string>();
-                if (chkClient1.Checked) activeProfiles.Add("Lumivara_Acc_1");
-                if (chkClient2.Checked) activeProfiles.Add("Lumivara_Acc_2");
-                if (chkClient3.Checked) activeProfiles.Add("Lumivara_Acc_3");
-
-                File.WriteAllLines(ConfigFilePath, activeProfiles.ToArray());
-            }
-            catch { }
-        }
-
-        private void InitializeContextMenu()
-        {
-            tabContextMenu = new ContextMenuStrip();
-            var deleteMenuItem = new ToolStripMenuItem("ลบข้อมูลล็อกอินของจอนี้ (Clear Data)");
-            deleteMenuItem.Click += DeleteSelectedTab_Click;
-            tabContextMenu.Items.Add(deleteMenuItem);
-        }
-
-        private void DeleteSelectedTab_Click(object sender, EventArgs e)
-        {
-            if (tabControl.SelectedTab == null) return;
-
-            TabPage selectedTab = tabControl.SelectedTab;
-            AccountProfile profile = selectedTab.Tag as AccountProfile;
-
-            var result = MessageBox.Show(
-                "แน่ใจว่าต้องการลบข้อมูลล็อกอินของ " + selectedTab.Text + " หรือไม่?",
-                "ยืนยันการลบข้อมูล",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning
-            );
-
-            if (result == DialogResult.Yes)
-            {
-                if (profile != null)
+                if (!Directory.Exists(
+                    basePath))
                 {
-                    if (profile.ProfileId == "Lumivara_Acc_1") chkClient1.Checked = false;
-                    else if (profile.ProfileId == "Lumivara_Acc_2") chkClient2.Checked = false;
-                    else if (profile.ProfileId == "Lumivara_Acc_3") chkClient3.Checked = false;
-
-                    DeleteProfileDataFolder(profile.ProfileId);
+                    Directory.CreateDirectory(
+                        basePath
+                    );
                 }
 
-                SaveConfig();
-                UpdateAppTitle();
-            }
-        }
+                List<string> activeProfiles =
+                    new List<string>();
 
-        private void DeleteProfileDataFolder(string profileId)
-        {
-            string profileFolder = Path.Combine(basePath, "Profiles", profileId);
-            if (!Directory.Exists(profileFolder)) return;
+                foreach (
+                    KeyValuePair<
+                        string,
+                        GameTabControl> pair
+                    in runningClients)
+                {
+                    activeProfiles.Add(
+                        pair.Key
+                    );
+                }
 
-            try
-            {
-                Directory.Delete(profileFolder, true);
+                File.WriteAllLines(
+                    ConfigFilePath,
+                    activeProfiles.ToArray()
+                );
             }
             catch
             {
-                Task.Run(async () =>
-                {
-                    await Task.Delay(2000);
-                    try
-                    {
-                        if (Directory.Exists(profileFolder)) Directory.Delete(profileFolder, true);
-                    }
-                    catch { }
-                });
             }
         }
 
-        private void InitializeTrayIcon()
-        {
-            trayMenu = new ContextMenuStrip();
-            var showMenuItem = new ToolStripMenuItem("แสดงหน้าต่างเกม");
-            showMenuItem.Click += (s, e) => ShowFromSystemTray();
-
-            var exitMenuItem = new ToolStripMenuItem("ปิดโปรแกรมทั้งหมด");
-            exitMenuItem.Click += (s, e) => ExitApplication();
-
-            trayMenu.Items.Add(showMenuItem);
-            trayMenu.Items.Add(exitMenuItem);
-
-            Icon appIcon = null;
-            try
-            {
-                if (Properties.Resources.LumivaraMultiClient != null)
-                {
-                    using (MemoryStream ms = new MemoryStream(Properties.Resources.LumivaraMultiClient))
-                    {
-                        appIcon = new Icon(ms);
-                    }
-                }
-            }
-            catch
-            {
-                appIcon = SystemIcons.Application;
-            }
-
-            if (appIcon == null) appIcon = SystemIcons.Application;
-
-            this.Icon = appIcon;
-            trayIcon = new NotifyIcon
-            {
-                Text = "Lumivara Multi Client",
-                Icon = appIcon,
-                ContextMenuStrip = trayMenu,
-                Visible = false
-            };
-
-            trayIcon.DoubleClick += (s, e) => ShowFromSystemTray();
-        }
-
-        private void HideToSystemTray()
-        {
-            this.Hide();
-            trayIcon.Visible = true;
-            trayIcon.ShowBalloonTip(2000, "Lumivara Multi Client", "โปรแกรมกำลังทำงานอยู่เบื้องหลัง ดับเบิ้ลคลิกที่ไอคอนเพื่อเปิดกลับมา", ToolTipIcon.Info);
-        }
-
-        private void ShowFromSystemTray()
-        {
-            this.Show();
-            this.WindowState = FormWindowState.Normal;
-            this.BringToFront();
-            trayIcon.Visible = false;
-        }
-
-        private void ExitApplication()
-        {
-            if (trayIcon != null)
-            {
-                trayIcon.Visible = false;
-                trayIcon.Dispose();
-            }
-            Application.Exit();
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            if (trayIcon != null)
-            {
-                trayIcon.Visible = false;
-                trayIcon.Dispose();
-            }
-            base.OnFormClosing(e);
-        }
-
-        private void TabControl_MouseClick(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Right)
-            {
-                for (int i = 0; i < tabControl.TabPages.Count; i++)
-                {
-                    Rectangle tabRect = tabControl.GetTabRect(i);
-                    if (tabRect.Contains(e.Location))
-                    {
-                        tabControl.SelectedIndex = i;
-                        tabContextMenu.Show(tabControl, e.Location);
-                        break;
-                    }
-                }
-            }
-        }
-
-        public void LinkStart(string url)
-        {
-            if (string.IsNullOrEmpty(url)) return;
-            try
-            {
-                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"ไม่สามารถเปิดเบราว์เซอร์ได้: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
+        // =========================================================
+        // Update Title
+        // =========================================================
 
         private void UpdateAppTitle()
         {
-            int runningCount = 0;
-            if (chkClient1.Checked) runningCount++;
-            if (chkClient2.Checked) runningCount++;
-            if (chkClient3.Checked) runningCount++;
+            int count =
+                runningClients.Count;
 
-            this.Text = $"Lumivara Online - Multi Client Manager ({runningCount} Client(s) Running)";
+            Text =
+                "Lumivara Online - Multi Client Manager (" +
+                count +
+                " Client(s) Running)";
+
+            if (lblRunningCount != null)
+            {
+                lblRunningCount.Text =
+                    "Running: " +
+                    count;
+            }
         }
 
-        private void MainForm_Load(object sender, EventArgs e)
-        {
+        // =========================================================
+        // Tray
+        // =========================================================
 
+        private void InitializeTrayIcon()
+        {
+            trayMenu =
+                new ContextMenuStrip();
+
+            ToolStripMenuItem showMenuItem =
+                new ToolStripMenuItem(
+                    "แสดงหน้าต่างเกม"
+                );
+
+            showMenuItem.Click += delegate
+            {
+                ShowFromSystemTray();
+            };
+
+            ToolStripMenuItem exitMenuItem =
+                new ToolStripMenuItem(
+                    "ปิดโปรแกรมทั้งหมด"
+                );
+
+            exitMenuItem.Click += delegate
+            {
+                ExitApplication();
+            };
+
+            trayMenu.Items.Add(
+                showMenuItem
+            );
+
+            trayMenu.Items.Add(
+                exitMenuItem
+            );
+
+            Icon appIcon = null;
+
+            try
+            {
+                if (
+                    Properties.Resources
+                        .LumivaraMultiClient != null)
+                {
+                    using (
+                        MemoryStream ms =
+                        new MemoryStream(
+                            Properties.Resources
+                                .LumivaraMultiClient))
+                    {
+                        appIcon =
+                            new Icon(ms);
+                    }
+                }
+            }
+            catch
+            {
+                appIcon =
+                    SystemIcons.Application;
+            }
+
+            if (appIcon == null)
+            {
+                appIcon =
+                    SystemIcons.Application;
+            }
+
+            Icon =
+                appIcon;
+
+            trayIcon =
+                new NotifyIcon
+                {
+                    Text =
+                        "Lumivara Multi Client",
+
+                    Icon =
+                        appIcon,
+
+                    ContextMenuStrip =
+                        trayMenu,
+
+                    Visible =
+                        false
+                };
+
+            trayIcon.DoubleClick += delegate
+            {
+                ShowFromSystemTray();
+            };
+        }
+
+        // =========================================================
+        // Hide To Tray
+        // =========================================================
+
+        private void HideToSystemTray()
+        {
+            if (trayIcon == null)
+                return;
+
+            trayIcon.Visible =
+                true;
+
+            Hide();
+
+            trayIcon.ShowBalloonTip(
+                2000,
+
+                "Lumivara Multi Client",
+
+                "โปรแกรมกำลังทำงานอยู่เบื้องหลัง",
+
+                ToolTipIcon.Info
+            );
+        }
+
+        // =========================================================
+        // Show From Tray
+        // =========================================================
+
+        private void ShowFromSystemTray()
+        {
+            if (trayIcon == null)
+                return;
+
+            Show();
+
+            WindowState =
+                FormWindowState.Normal;
+
+            BringToFront();
+
+            Activate();
+
+            trayIcon.Visible =
+                false;
+        }
+
+        // =========================================================
+        // Close All Clients
+        // =========================================================
+
+        private void CloseAllClients()
+        {
+            List<GameTabControl> clients =
+                new List<GameTabControl>(
+                    runningClients.Values
+                );
+
+            runningClients.Clear();
+
+            foreach (
+                GameTabControl gameControl
+                in clients)
+            {
+                try
+                {
+                    if (gameControl.Parent != null)
+                    {
+                        gameControl.Parent.Controls.Remove(
+                            gameControl
+                        );
+                    }
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    gameControl.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        // =========================================================
+        // Exit
+        // =========================================================
+
+        private void ExitApplication()
+        {
+            SaveConfig();
+
+            CloseAllClients();
+
+            if (trayIcon != null)
+            {
+                trayIcon.Visible =
+                    false;
+
+                trayIcon.Dispose();
+
+                trayIcon = null;
+            }
+
+            Application.Exit();
+        }
+
+        // =========================================================
+        // Form Closing
+        // =========================================================
+
+        protected override void OnFormClosing(
+            FormClosingEventArgs e)
+        {
+            SaveConfig();
+
+            CloseAllClients();
+
+            if (trayIcon != null)
+            {
+                trayIcon.Visible =
+                    false;
+
+                trayIcon.Dispose();
+
+                trayIcon = null;
+            }
+
+            base.OnFormClosing(
+                e
+            );
+        }
+
+        // =========================================================
+        // Open URL
+        // =========================================================
+
+        public void LinkStart(
+            string url)
+        {
+            if (string.IsNullOrEmpty(
+                url))
+                return;
+
+            try
+            {
+                Process.Start(
+                    new ProcessStartInfo
+                    {
+                        FileName = url,
+
+                        UseShellExecute = true
+                    }
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    "ไม่สามารถเปิดเบราว์เซอร์ได้: " +
+                    ex.Message,
+
+                    "Error",
+
+                    MessageBoxButtons.OK,
+
+                    MessageBoxIcon.Error
+                );
+            }
         }
     }
 }
