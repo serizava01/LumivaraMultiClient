@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -16,7 +17,7 @@ namespace LumivaraMultiClient.Forms
         // Settings
         // =========================================================
 
-        private const int MaxClients = 20;
+    
 
         // =========================================================
         // Client Data
@@ -49,12 +50,18 @@ namespace LumivaraMultiClient.Forms
 
         private Label lblSelectedClient;
         private Label lblRunningCount;
+        private Label lblClientStatus;
 
         private Button btnAddClient;
         private Button btnHideToTray;
         private Button btnWiki;
         private Button btnUpdates;
         private Button btnGithub;
+        private ComboBox nummonitor;
+
+        private int maxClients = 10;
+        private bool isLoadingClientCount = false;
+
 
         // =========================================================
         // Context Menu
@@ -101,6 +108,9 @@ namespace LumivaraMultiClient.Forms
             InitializeMainUI();
             InitializeContextMenu();
             InitializeTrayIcon();
+
+            InitializeClientCountSelector();
+            LoadClientCount();
 
             CreateClientList();
             LoadSavedInstances();
@@ -165,6 +175,7 @@ namespace LumivaraMultiClient.Forms
                         FontStyle.Bold
                     )
             };
+            
 
             lblRunningCount = new Label
             {
@@ -188,14 +199,35 @@ namespace LumivaraMultiClient.Forms
                 ForeColor =
                     Color.DimGray
             };
-
-            headerPanel.Controls.Add(
-                lblSelectedClient
-            );
-
-            headerPanel.Controls.Add(
-                lblRunningCount
-            );
+            lblClientStatus = new Label
+            {
+                Text =
+                    "Monitor",
+                AutoSize = true,
+                Location =
+                    new Point(
+                        350,
+                        13
+                    ),
+                Font =
+                    new Font(
+                        "Segoe UI",
+                        9f
+                    ),
+                ForeColor =
+                    Color.DimGray
+            };
+            nummonitor = new ComboBox
+            {
+                Location = new Point(400, 10),
+                Width = 150,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+a
+            };
+            headerPanel.Controls.Add(lblSelectedClient);
+            headerPanel.Controls.Add(lblRunningCount);
+            headerPanel.Controls.Add(lblClientStatus);
+            headerPanel.Controls.Add(nummonitor);
 
             // =====================================================
             // SIDEBAR
@@ -535,7 +567,251 @@ namespace LumivaraMultiClient.Forms
         // =========================================================
         // Empty Content
         // =========================================================
+        // =========================================================
+        // Client Count Selector
+        // =========================================================
 
+        private void InitializeClientCountSelector()
+        {
+            if (nummonitor == null)
+                return;
+
+            isLoadingClientCount = true;
+
+            nummonitor.Items.Clear();
+
+            for (int i = 1; i <= 100; i++)
+            {
+                nummonitor.Items.Add(i.ToString());
+            }
+
+            nummonitor.SelectedIndex = maxClients - 1;
+
+            nummonitor.SelectedIndexChanged +=
+                Nummonitor_SelectedIndexChanged;
+
+            isLoadingClientCount = false;
+        }
+
+        // =========================================================
+        // Load Client Count
+        // =========================================================
+
+        private void LoadClientCount()
+        {
+            maxClients = 3;
+
+            if (!File.Exists(ConfigFilePath))
+            {
+                SetClientCountComboValue();
+                return;
+            }
+
+            try
+            {
+                string[] lines =
+                    File.ReadAllLines(ConfigFilePath);
+
+                foreach (string line in lines)
+                {
+                    string value = line.Trim();
+
+                    if (!value.StartsWith(
+                        "MaxClients=",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string numberText =
+                        value.Substring(
+                            "MaxClients=".Length
+                        ).Trim();
+
+                    int savedCount;
+
+                    if (int.TryParse(
+                        numberText,
+                        out savedCount))
+                    {
+                        if (savedCount >= 1 &&
+                            savedCount <= 100)
+                        {
+                            maxClients = savedCount;
+                        }
+                    }
+
+                    break;
+                }
+            }
+            catch
+            {
+                maxClients = 3;
+            }
+
+            SetClientCountComboValue();
+        }
+
+        // =========================================================
+        // Set ComboBox Value
+        // =========================================================
+
+        private void SetClientCountComboValue()
+        {
+            if (nummonitor == null)
+                return;
+
+            if (maxClients < 1)
+                maxClients = 1;
+
+            if (maxClients > 100)
+                maxClients = 100;
+
+            isLoadingClientCount = true;
+
+            nummonitor.SelectedIndex =
+                maxClients - 1;
+
+            isLoadingClientCount = false;
+        }
+
+        // =========================================================
+        // ComboBox Changed
+        // =========================================================
+
+        private void Nummonitor_SelectedIndexChanged(
+            object sender,
+            EventArgs e)
+        {
+            if (isLoadingClientCount)
+                return;
+
+            if (nummonitor == null)
+                return;
+
+            if (nummonitor.SelectedIndex < 0)
+                return;
+
+            int newCount =
+                nummonitor.SelectedIndex + 1;
+
+            // ไม่ให้ลดจำนวนต่ำกว่าจำนวน Client
+            // ที่กำลังเปิดอยู่
+            if (runningClients.Count > newCount)
+            {
+                MessageBox.Show(
+                    "ตอนนี้มี Client กำลังเปิดอยู่ " +
+                    runningClients.Count +
+                    " จอ\n\n" +
+                    "กรุณาปิด Client ที่เกินจำนวนก่อน\n" +
+                    "จึงจะลดจำนวน Client ได้",
+                    "ไม่สามารถลดจำนวน Client",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+
+                SetClientCountComboValue();
+                return;
+            }
+
+            maxClients = newCount;
+
+            RebuildClientList();
+
+            SaveConfig();
+        }
+
+        // =========================================================
+        // Rebuild Client List
+        // =========================================================
+
+        private void RebuildClientList()
+        {
+            if (clientListPanel == null)
+                return;
+
+            string oldSelectedProfileId =
+                selectedProfileId;
+
+            clientListPanel.SuspendLayout();
+
+            try
+            {
+                clientListPanel.Controls.Clear();
+
+                clientItems.Clear();
+                clientStatusLabels.Clear();
+
+                for (int i = 1; i <= maxClients; i++)
+                {
+                    string profileId =
+                        "Lumivara_Acc_" + i;
+
+                    if (!profiles.ContainsKey(profileId))
+                    {
+                        AccountProfile profile =
+                            new AccountProfile
+                            {
+                                ProfileId = profileId,
+                                Title = "Client " + i,
+                                TargetUrl =
+                                    "https://lumivaraonline.com/"
+                            };
+
+                        profiles[profileId] =
+                            profile;
+                    }
+
+                    CreateClientItem(
+                        profiles[profileId]
+                    );
+                }
+            }
+            finally
+            {
+                clientListPanel.ResumeLayout();
+            }
+            foreach (
+                KeyValuePair<
+                    string,
+                    GameTabControl> pair
+                in runningClients)
+            {
+                string profileId =
+                    pair.Key;
+
+                if (!clientStatusLabels.ContainsKey(
+                    profileId))
+                {
+                    continue;
+                }
+
+                UpdateClientStatus(
+                    profileId,
+                    true
+                );
+            }
+            if (!string.IsNullOrEmpty(
+                oldSelectedProfileId))
+            {
+                if (clientItems.ContainsKey(
+                    oldSelectedProfileId))
+                {
+                    SelectClient(
+                        oldSelectedProfileId
+                    );
+                }
+                else
+                {
+                    selectedProfileId = null;
+
+                    lblSelectedClient.Text =
+                        "ยังไม่ได้เลือก Client";
+
+                    ShowEmptyContent();
+                }
+            }
+        }
         private void ShowEmptyContent()
         {
             contentPanel.Controls.Clear();
@@ -577,15 +853,19 @@ namespace LumivaraMultiClient.Forms
         // Create Client List
         // =========================================================
 
+  
+
         private void CreateClientList()
         {
-            for (
-                int i = 1;
-                i <= MaxClients;
-                i++)
+            // เตรียม Profile ไว้สูงสุด 100 Client
+            // แต่จะแสดงตามจำนวนที่เลือกใน ComboBox
+            for (int i = 1; i <= 100; i++)
             {
                 string profileId =
                     "Lumivara_Acc_" + i;
+
+                if (profiles.ContainsKey(profileId))
+                    continue;
 
                 string title =
                     "Client " + i;
@@ -593,11 +873,9 @@ namespace LumivaraMultiClient.Forms
                 AccountProfile profile =
                     new AccountProfile
                     {
-                        ProfileId =
-                            profileId,
+                        ProfileId = profileId,
 
-                        Title =
-                            title,
+                        Title = title,
 
                         TargetUrl =
                             "https://lumivaraonline.com/"
@@ -605,11 +883,9 @@ namespace LumivaraMultiClient.Forms
 
                 profiles[profileId] =
                     profile;
-
-                CreateClientItem(
-                    profile
-                );
             }
+
+            RebuildClientList();
         }
 
         // =========================================================
@@ -1484,7 +1760,7 @@ namespace LumivaraMultiClient.Forms
         {
             MessageBox.Show(
                 "ตอนนี้ระบบเตรียม Client ไว้ " +
-                MaxClients +
+                nummonitor+
                 " จอแล้ว\n\n" +
                 "สามารถดับเบิลคลิก Client ที่ต้องการเพื่อเปิดได้เลย",
 
@@ -1584,23 +1860,30 @@ namespace LumivaraMultiClient.Forms
                     );
                 }
 
-                List<string> activeProfiles =
+                List<string> configLines =
                     new List<string>();
 
+                // บันทึกจำนวน Client
+                configLines.Add(
+                    "MaxClients=" +
+                    maxClients
+                );
+
+                // บันทึก Client ที่กำลังเปิดอยู่
                 foreach (
                     KeyValuePair<
                         string,
                         GameTabControl> pair
                     in runningClients)
                 {
-                    activeProfiles.Add(
+                    configLines.Add(
                         pair.Key
                     );
                 }
 
                 File.WriteAllLines(
                     ConfigFilePath,
-                    activeProfiles.ToArray()
+                    configLines.ToArray()
                 );
             }
             catch
