@@ -221,8 +221,7 @@ namespace LumivaraMultiClient.Forms
             {
                 Location = new Point(400, 10),
                 Width = 150,
-                DropDownStyle = ComboBoxStyle.DropDownList,
-a
+                DropDownStyle = ComboBoxStyle.DropDownList
             };
             headerPanel.Controls.Add(lblSelectedClient);
             headerPanel.Controls.Add(lblRunningCount);
