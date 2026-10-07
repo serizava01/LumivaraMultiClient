@@ -223,6 +223,7 @@ namespace LumivaraMultiClient.Forms
                 Width = 150,
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
+            
             headerPanel.Controls.Add(lblSelectedClient);
             headerPanel.Controls.Add(lblRunningCount);
             headerPanel.Controls.Add(lblClientStatus);
