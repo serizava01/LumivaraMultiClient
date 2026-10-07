@@ -276,7 +276,7 @@ namespace LumivaraMultiClient.Controls
         // SET ACTIVE
         // =========================================================
         // Active = Normal
-        // Inactive = Low
+        // Inactive =  Low
         // =========================================================
 
         public void SetActive(
