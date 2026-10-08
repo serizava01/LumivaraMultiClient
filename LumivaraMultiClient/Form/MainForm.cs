@@ -580,7 +580,7 @@ namespace LumivaraMultiClient.Forms
 
             nummonitor.Items.Clear();
 
-            for (int i = 1; i <= 100; i++)
+            for (int i = 1; i <= 10; i++)
             {
                 nummonitor.Items.Add(i.ToString());
             }
@@ -1852,42 +1852,28 @@ namespace LumivaraMultiClient.Forms
         {
             try
             {
-                if (!Directory.Exists(
-                    basePath))
+                if (!Directory.Exists(basePath))
                 {
-                    Directory.CreateDirectory(
-                        basePath
-                    );
+                    Directory.CreateDirectory(basePath);
                 }
 
-                List<string> configLines =
-                    new List<string>();
+                List<string> configLines = new List<string>();
 
                 // บันทึกจำนวน Client
-                configLines.Add(
-                    "MaxClients=" +
-                    maxClients
-                );
+                configLines.Add("MaxClients=" + maxClients);
 
                 // บันทึก Client ที่กำลังเปิดอยู่
-                foreach (
-                    KeyValuePair<
-                        string,
-                        GameTabControl> pair
-                    in runningClients)
+                foreach (KeyValuePair<string, GameTabControl> pair in runningClients)
                 {
-                    configLines.Add(
-                        pair.Key
-                    );
+                    configLines.Add(pair.Key);
                 }
 
-                File.WriteAllLines(
-                    ConfigFilePath,
-                    configLines.ToArray()
-                );
+                File.WriteAllLines(ConfigFilePath, configLines.ToArray());
             }
             catch
             {
+
+
             }
         }
 
@@ -2089,6 +2075,8 @@ namespace LumivaraMultiClient.Forms
                 }
                 catch
                 {
+
+
                 }
             }
         }

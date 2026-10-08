@@ -267,8 +267,7 @@ namespace LumivaraMultiClient.Controls
             }
             finally
             {
-                isInitializing =
-                    false;
+                isInitializing = false;
             }
         }
 
@@ -309,9 +308,7 @@ namespace LumivaraMultiClient.Controls
         // REFRESH
         // =========================================================
 
-        private void BtnRefresh_Click(
-            object sender,
-            EventArgs e)
+        private void BtnRefresh_Click(object sender, EventArgs e)
         {
             if (isDisposed)
                 return;
@@ -325,9 +322,12 @@ namespace LumivaraMultiClient.Controls
             try
             {
                 WebView.CoreWebView2.Reload();
+                
             }
             catch
             {
+
+
             }
         }
 
@@ -357,6 +357,8 @@ namespace LumivaraMultiClient.Controls
             }
             catch
             {
+
+
             }
         }
 
@@ -377,13 +379,12 @@ namespace LumivaraMultiClient.Controls
 
             try
             {
-                btnMute.Text =
-                    WebView.CoreWebView2.IsMuted
-                        ? "เปิดเสียง"
-                        : "ปิดเสียง";
+                btnMute.Text = WebView.CoreWebView2.IsMuted ? "เปิดเสียง" : "ปิดเสียง";
             }
             catch
             {
+
+
             }
         }
 
@@ -398,10 +399,7 @@ namespace LumivaraMultiClient.Controls
             {
                 return CoreWebView2MemoryUsageTargetLevel.Low;
             }
-
-            return WebViewManager.GetMemoryLevel(
-                WebView
-            );
+            return WebViewManager.GetMemoryLevel(WebView);
         }
 
         // =========================================================
