@@ -155,7 +155,7 @@ namespace LumivaraMultiClient.Forms
                 AutoSize = true,
                 Location = new Point(350, 13),
                 Font = new Font("Segoe UI", 9f),
-                ForeColor = Color.DimGray
+                ForeColor = Color.Black
             };
 
             nummonitor = new ComboBox

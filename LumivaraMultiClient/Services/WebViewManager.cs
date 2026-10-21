@@ -1,6 +1,6 @@
-﻿
-using System;
+﻿using System;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -25,38 +25,62 @@ namespace LumivaraMultiClient.Services
         private static readonly string DiagnosticLogPath =
             Path.Combine(BaseDataPath, "RefreshLog.txt");
 
+        private static readonly string DiagnosticLogBackupPath =
+            DiagnosticLogPath + ".old";
+
+        // เก็บไฟล์ปัจจุบันประมาณ 2 MB และสำรองไว้เพียง 1 ไฟล์
+        private const long MaxDiagnosticLogBytes = 2 * 1024 * 1024;
+
+        private static readonly object logLock = new object();
+
         // =========================================================
         // SHARED ENVIRONMENT
         // =========================================================
 
         private static CoreWebView2Environment sharedEnvironment;
 
-        private static readonly object environmentLock =
-            new object();
+        private static readonly object environmentLock = new object();
 
         private static Task<CoreWebView2Environment> environmentTask;
 
         // =========================================================
-        // LOG
+        // SHARED DIAGNOSTIC LOG
         // =========================================================
 
-        private static void WriteLog(string profileId, string message)
+        // เรียกเมธอดนี้ได้จาก GameTabControl และ WebViewManager
+        // เพื่อให้ทุกข้อความใช้ไฟล์เดียวกันและมีระบบหมุนเวียนไฟล์ร่วมกัน
+        public static void WriteDiagnosticLog(string profileId, string message)
         {
             try
             {
                 if (!Directory.Exists(BaseDataPath))
                     Directory.CreateDirectory(BaseDataPath);
 
-                File.AppendAllText(
-                    DiagnosticLogPath,
+                string safeProfileId = string.IsNullOrWhiteSpace(profileId)
+                    ? "WebViewManager"
+                    : profileId;
+
+                string line =
                     DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
-                    + " | "
-                    + (string.IsNullOrWhiteSpace(profileId)
-                        ? "WebViewManager"
-                        : profileId)
-                    + " | "
-                    + message
-                    + Environment.NewLine);
+                    + " | " + safeProfileId
+                    + " | " + (message ?? string.Empty)
+                    + Environment.NewLine;
+
+                byte[] bytes = Encoding.UTF8.GetBytes(line);
+
+                lock (logLock)
+                {
+                    RotateLogIfNeeded(bytes.Length);
+
+                    using (FileStream stream = new FileStream(
+                        DiagnosticLogPath,
+                        FileMode.Append,
+                        FileAccess.Write,
+                        FileShare.Read))
+                    {
+                        stream.Write(bytes, 0, bytes.Length);
+                    }
+                }
             }
             catch
             {
@@ -64,12 +88,40 @@ namespace LumivaraMultiClient.Services
             }
         }
 
+        private static void RotateLogIfNeeded(int incomingBytes)
+        {
+            try
+            {
+                if (!File.Exists(DiagnosticLogPath))
+                    return;
+
+                FileInfo info = new FileInfo(DiagnosticLogPath);
+
+                if (info.Length + incomingBytes <= MaxDiagnosticLogBytes)
+                    return;
+
+                // ลบไฟล์สำรองเดิมก่อน แล้วค่อยย้ายไฟล์ปัจจุบันไปเป็น .old
+                if (File.Exists(DiagnosticLogBackupPath))
+                    File.Delete(DiagnosticLogBackupPath);
+
+                File.Move(DiagnosticLogPath, DiagnosticLogBackupPath);
+            }
+            catch
+            {
+                // ถ้าหมุนเวียนไม่ได้ ให้พยายามเขียน Log ต่อโดยไม่ทำให้เกมหยุด
+            }
+        }
+
+        private static void WriteLog(string profileId, string message)
+        {
+            WriteDiagnosticLog(profileId, message);
+        }
+
         // =========================================================
         // GET SHARED ENVIRONMENT
         // =========================================================
 
-        private static async Task<CoreWebView2Environment>
-            GetEnvironmentAsync()
+        private static async Task<CoreWebView2Environment> GetEnvironmentAsync()
         {
             Task<CoreWebView2Environment> task;
 
@@ -79,9 +131,7 @@ namespace LumivaraMultiClient.Services
                     return sharedEnvironment;
 
                 if (environmentTask == null)
-                {
                     environmentTask = CreateEnvironmentAsync();
-                }
 
                 task = environmentTask;
             }
@@ -92,13 +142,10 @@ namespace LumivaraMultiClient.Services
             }
             catch
             {
-                // Allow another initialization attempt after failure.
                 lock (environmentLock)
                 {
                     if (object.ReferenceEquals(environmentTask, task))
-                    {
                         environmentTask = null;
-                    }
                 }
 
                 throw;
@@ -109,13 +156,10 @@ namespace LumivaraMultiClient.Services
         // CREATE ENVIRONMENT
         // =========================================================
 
-        private static async Task<CoreWebView2Environment>
-            CreateEnvironmentAsync()
+        private static async Task<CoreWebView2Environment> CreateEnvironmentAsync()
         {
             if (!Directory.Exists(WebViewDataPath))
-            {
                 Directory.CreateDirectory(WebViewDataPath);
-            }
 
             CoreWebView2EnvironmentOptions options =
                 new CoreWebView2EnvironmentOptions();
@@ -183,66 +227,41 @@ namespace LumivaraMultiClient.Services
 
                 CoreWebView2 core = webView.CoreWebView2;
 
-                // SETTINGS
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
 
-                // VISIBILITY SCRIPT
-                // Keep existing game behavior unchanged.
+                // Keep existing game visibility behavior unchanged.
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(
                     @"
                     document.addEventListener(
                         'visibilitychange',
-                        function(e)
-                        {
-                            e.stopImmediatePropagation();
-                        },
+                        function(e) { e.stopImmediatePropagation(); },
                         true
                     );
 
-                    Object.defineProperty(
-                        document,
-                        'hidden',
-                        {
-                            configurable: true,
-                            get: function()
-                            {
-                                return false;
-                            }
-                        }
-                    );
+                    Object.defineProperty(document, 'hidden', {
+                        configurable: true,
+                        get: function() { return false; }
+                    });
 
-                    Object.defineProperty(
-                        document,
-                        'visibilityState',
-                        {
-                            configurable: true,
-                            get: function()
-                            {
-                                return 'visible';
-                            }
-                        }
-                    );
+                    Object.defineProperty(document, 'visibilityState', {
+                        configurable: true,
+                        get: function() { return 'visible'; }
+                    });
                     ");
 
-                // POINTER LOCK
-                // Keep existing behavior unchanged.
+                // Keep existing pointer-lock behavior unchanged.
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(
                     @"
-                    Element.prototype.requestPointerLock =
-                        function()
-                        {
-                            console.log('Pointer lock disabled');
-                        };
+                    Element.prototype.requestPointerLock = function() {
+                        console.log('Pointer lock disabled');
+                    };
 
-                    document.exitPointerLock =
-                        function()
-                        {
-                            console.log('Pointer lock disabled');
-                        };
+                    document.exitPointerLock = function() {
+                        console.log('Pointer lock disabled');
+                    };
                     ");
 
-                // DEFAULT MEMORY TARGET
                 core.MemoryUsageTargetLevel =
                     CoreWebView2MemoryUsageTargetLevel.Low;
 
@@ -250,16 +269,13 @@ namespace LumivaraMultiClient.Services
             }
             catch (Exception ex)
             {
-                WriteLog(
-                    profileId,
-                    "Initialization failed: " + ex);
-
+                WriteLog(profileId, "Initialization failed: " + ex);
                 throw;
             }
         }
 
         // =========================================================
-        // SET MEMORY NORMAL
+        // SET MEMORY LEVEL
         // =========================================================
 
         public static void SetMemoryNormal(WebView2 webView)
@@ -269,20 +285,12 @@ namespace LumivaraMultiClient.Services
                 CoreWebView2MemoryUsageTargetLevel.Normal);
         }
 
-        // =========================================================
-        // SET MEMORY LOW
-        // =========================================================
-
         public static void SetMemoryLow(WebView2 webView)
         {
             SetMemoryLevel(
                 webView,
                 CoreWebView2MemoryUsageTargetLevel.Low);
         }
-
-        // =========================================================
-        // SET MEMORY LEVEL
-        // =========================================================
 
         private static void SetMemoryLevel(
             WebView2 webView,
@@ -304,24 +312,16 @@ namespace LumivaraMultiClient.Services
             }
         }
 
-        // =========================================================
-        // GET MEMORY LEVEL
-        // =========================================================
-
         public static CoreWebView2MemoryUsageTargetLevel GetMemoryLevel(
             WebView2 webView)
         {
             if (webView == null || webView.IsDisposed)
-            {
                 return CoreWebView2MemoryUsageTargetLevel.Low;
-            }
 
             try
             {
                 if (webView.CoreWebView2 == null)
-                {
                     return CoreWebView2MemoryUsageTargetLevel.Low;
-                }
 
                 return webView.CoreWebView2.MemoryUsageTargetLevel;
             }
@@ -332,7 +332,7 @@ namespace LumivaraMultiClient.Services
         }
 
         // =========================================================
-        // SHARED ENVIRONMENT
+        // SHARED ENVIRONMENT / PATHS
         // =========================================================
 
         public static CoreWebView2Environment SharedEnvironment
@@ -346,18 +346,10 @@ namespace LumivaraMultiClient.Services
             }
         }
 
-        // =========================================================
-        // DATA PATH
-        // =========================================================
-
         public static string DataPath
         {
             get { return WebViewDataPath; }
         }
-
-        // =========================================================
-        // PROFILE PATH
-        // =========================================================
 
         public static string GetProfilePath(string profileId)
         {

@@ -1,7 +1,6 @@
-﻿
-using System;
+﻿using System;
 using System.Diagnostics;
-using System.IO;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
@@ -13,161 +12,106 @@ namespace LumivaraMultiClient.Controls
 {
     public class GameTabControl : UserControl
     {
-        // =========================================================
-        // PUBLIC
-        // =========================================================
-
         public WebView2 WebView { get; private set; }
-
         public AccountProfile Profile { get; private set; }
-
-        // =========================================================
-        // UI
-        // =========================================================
 
         private Panel topBar;
         private Button btnMute;
         private Button btnRefresh;
 
-        // =========================================================
-        // STATE
-        // =========================================================
-
-        private bool isInitializing = false;
-        private bool isDisposed = false;
-        private bool isRefreshing = false;
+        private bool isInitializing;
+        private bool isDisposed;
+        private bool isRefreshing;
+        private bool isCollectingDiagnostic;
+        private bool isActive = true;
 
         private readonly Stopwatch refreshTimer = new Stopwatch();
+        private readonly Dictionary<ulong, Stopwatch> navigationTimers =
+            new Dictionary<ulong, Stopwatch>();
 
-        private readonly string DiagnosticLogPath = Path.Combine(
-            Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData),
-            "LumivaraMultiClient",
-            "RefreshLog.txt");
-
-        // ป้องกันปุ่มค้าง หากโหลดไม่เสร็จภายใน 180 วินาที
+        private System.Windows.Forms.Timer refreshProgressTimer;
+        private System.Windows.Forms.Timer diagnosticTimer;
         private System.Windows.Forms.Timer refreshTimeoutTimer;
 
+        private DateTime lastProcessSampleTime = DateTime.MinValue;
+        private TimeSpan lastWebViewCpuTime = TimeSpan.Zero;
+
+        private const int RefreshProgressIntervalMilliseconds = 15000;
+        private const int DiagnosticIntervalMilliseconds = 30000;
         private const int RefreshTimeoutMilliseconds = 180000;
-
-        // =========================================================
-        // CONSTRUCTOR
-        // =========================================================
-
         public GameTabControl(AccountProfile profile)
         {
             if (profile == null)
                 throw new ArgumentNullException("profile");
 
             Profile = profile;
-
             InitializeComponents();
-
             _ = InitGameAsync();
         }
 
-        // =========================================================
-        // LOG
-        // =========================================================
-
+        // ส่ง Log ไปยัง WebViewManager เพื่อใช้ไฟล์และระบบหมุนเวียน Log ร่วมกัน
         private void WriteRefreshLog(string message)
         {
-            try
-            {
-                string folder = Path.GetDirectoryName(
-                    DiagnosticLogPath);
-
-                if (!Directory.Exists(folder))
-                    Directory.CreateDirectory(folder);
-
-                string profileId = Profile != null
-                    ? Profile.ProfileId
-                    : "Unknown";
-
-                string logLine =
-                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")
-                    + " | " + profileId
-                    + " | " + message
-                    + Environment.NewLine;
-
-                File.AppendAllText(
-                    DiagnosticLogPath,
-                    logLine);
-            }
-            catch
-            {
-                // ไม่ให้ปัญหาการเขียน Log กระทบการทำงานของเกม
-            }
+            string profileId = Profile != null ? Profile.ProfileId : "Unknown";
+            WebViewManager.WriteDiagnosticLog(profileId, message);
         }
-
-        // =========================================================
-        // INITIALIZE COMPONENTS
-        // =========================================================
 
         private void InitializeComponents()
         {
             Dock = DockStyle.Fill;
+            topBar = new Panel { Dock = DockStyle.Top, Height = 32 };
 
-            // TOP BAR
-            topBar = new Panel();
-            topBar.Dock = DockStyle.Top;
-            topBar.Height = 32;
-
-            // REFRESH BUTTON
-            btnRefresh = new Button();
-            btnRefresh.Text = "รีเฟรช";
-            btnRefresh.Width = 75;
-            btnRefresh.Height = 30;
-            btnRefresh.Dock = DockStyle.Left;
-            btnRefresh.FlatStyle = FlatStyle.Standard;
-            btnRefresh.UseVisualStyleBackColor = true;
-            btnRefresh.BackColor =
-                System.Drawing.SystemColors.Control;
-            btnRefresh.ForeColor =
-                System.Drawing.SystemColors.ControlText;
-
+            btnRefresh = new Button
+            {
+                Text = "รีเฟรช",
+                Width = 75,
+                Height = 30,
+                Dock = DockStyle.Left,
+                FlatStyle = FlatStyle.Standard,
+                UseVisualStyleBackColor = true,
+                BackColor = System.Drawing.SystemColors.Control,
+                ForeColor = System.Drawing.SystemColors.ControlText
+            };
             btnRefresh.Click += BtnRefresh_Click;
 
-            // MUTE BUTTON
-            btnMute = new Button();
-            btnMute.Text = "ปิดเสียง";
-            btnMute.Width = 90;
-            btnMute.Height = 30;
-            btnMute.Dock = DockStyle.Left;
-            btnMute.FlatStyle = FlatStyle.Standard;
-            btnMute.UseVisualStyleBackColor = true;
-            btnMute.BackColor =
-                System.Drawing.SystemColors.Control;
-            btnMute.ForeColor =
-                System.Drawing.SystemColors.ControlText;
-
+            btnMute = new Button
+            {
+                Text = "ปิดเสียง",
+                Width = 90,
+                Height = 30,
+                Dock = DockStyle.Left,
+                FlatStyle = FlatStyle.Standard,
+                UseVisualStyleBackColor = true,
+                BackColor = System.Drawing.SystemColors.Control,
+                ForeColor = System.Drawing.SystemColors.ControlText
+            };
             btnMute.Click += BtnMute_Click;
 
-            // ADD BUTTONS
             topBar.Controls.Add(btnMute);
             topBar.Controls.Add(btnRefresh);
 
-            // WEBVIEW
-            WebView = new WebView2();
-            WebView.Dock = DockStyle.Fill;
-
+            WebView = new WebView2 { Dock = DockStyle.Fill };
             Controls.Add(WebView);
             Controls.Add(topBar);
 
-            // REFRESH TIMEOUT
-            refreshTimeoutTimer =
-                new System.Windows.Forms.Timer();
+            refreshTimeoutTimer = new System.Windows.Forms.Timer
+            {
+                Interval = RefreshTimeoutMilliseconds
+            };
+            refreshTimeoutTimer.Tick += RefreshTimeoutTimer_Tick;
 
-            refreshTimeoutTimer.Interval =
-                RefreshTimeoutMilliseconds;
+            refreshProgressTimer = new System.Windows.Forms.Timer
+            {
+                Interval = RefreshProgressIntervalMilliseconds
+            };
+            refreshProgressTimer.Tick += RefreshProgressTimer_Tick;
 
-            refreshTimeoutTimer.Tick +=
-                RefreshTimeoutTimer_Tick;
+            diagnosticTimer = new System.Windows.Forms.Timer
+            {
+                Interval = DiagnosticIntervalMilliseconds
+            };
+            diagnosticTimer.Tick += DiagnosticTimer_Tick;
         }
-
-        // =========================================================
-        // INITIALIZE WEBVIEW
-        // =========================================================
 
         private async Task InitGameAsync()
         {
@@ -175,58 +119,123 @@ namespace LumivaraMultiClient.Controls
                 return;
 
             isInitializing = true;
-
             try
             {
                 WriteRefreshLog("WebView initialization started");
+                await WebViewManager.InitializeInstanceAsync(WebView, Profile.ProfileId);
 
-                await WebViewManager.InitializeInstanceAsync(
-                    WebView,
-                    Profile.ProfileId);
-
-                if (isDisposed || WebView == null)
-                    return;
-
-                if (WebView.CoreWebView2 == null)
+                if (isDisposed || WebView == null || WebView.CoreWebView2 == null)
                 {
-                    WriteRefreshLog(
-                        "Initialization failed: CoreWebView2 is null");
+                    WriteRefreshLog("Initialization failed: CoreWebView2 is null");
                     return;
                 }
 
-                WebView.CoreWebView2.NavigationCompleted -=
-                    WebView_NavigationCompleted;
+                CoreWebView2 core = WebView.CoreWebView2;
+                core.NavigationStarting -= WebView_NavigationStarting;
+                core.NavigationStarting += WebView_NavigationStarting;
+                core.DOMContentLoaded -= WebView_DOMContentLoaded;
+                core.DOMContentLoaded += WebView_DOMContentLoaded;
+                core.NavigationCompleted -= WebView_NavigationCompleted;
+                core.NavigationCompleted += WebView_NavigationCompleted;
+                core.WebResourceResponseReceived -= WebView_WebResourceResponseReceived;
+                core.WebResourceResponseReceived += WebView_WebResourceResponseReceived;
 
-                WebView.CoreWebView2.NavigationCompleted +=
-                    WebView_NavigationCompleted;
+                await core.AddScriptToExecuteOnDocumentCreatedAsync(@"
+                    (function () {
+                        if (window.__lumiDiagInstalled) return;
+                        window.__lumiDiagInstalled = true;
+
+                        var frames = 0;
+                        var lastMeasure = performance.now();
+                        var currentFps = 0;
+                        var enabled = true;
+                        var rafRunning = false;
+
+                        function countFrame(now) {
+                            rafRunning = false;
+                            if (!enabled) {
+                                window.__lumiDiagFps = 0;
+                                return;
+                            }
+
+                            frames++;
+                            var elapsed = now - lastMeasure;
+                            if (elapsed >= 1000) {
+                                currentFps = Math.round(frames * 1000 / elapsed);
+                                frames = 0;
+                                lastMeasure = now;
+                            }
+
+                            window.__lumiDiagFps = currentFps;
+                            rafRunning = true;
+                            requestAnimationFrame(countFrame);
+                        }
+
+                        window.__lumiDiagSetEnabled = function (value) {
+                            enabled = !!value;
+                            if (!enabled) {
+                                currentFps = 0;
+                                window.__lumiDiagFps = 0;
+                                return;
+                            }
+
+                            if (!rafRunning) {
+                                frames = 0;
+                                lastMeasure = performance.now();
+                                rafRunning = true;
+                                requestAnimationFrame(countFrame);
+                            }
+                        };
+
+                        window.__lumiDiagRead = function () {
+                            var heapUsed = null, heapLimit = null;
+                            try {
+                                if (performance.memory) {
+                                    heapUsed = performance.memory.usedJSHeapSize;
+                                    heapLimit = performance.memory.jsHeapSizeLimit;
+                                }
+                            } catch (e) {}
+
+                            return {
+                                fps: window.__lumiDiagFps || 0,
+                                fpsSource: 'requestAnimationFrame estimate, not game-engine FPS',
+                                visibilityState: document.visibilityState,
+                                readyState: document.readyState,
+                                domNodes: document.getElementsByTagName('*').length,
+                                resourceCount: performance.getEntriesByType('resource').length,
+                                jsHeapUsed: heapUsed,
+                                jsHeapLimit: heapLimit
+                            };
+                        };
+
+                        rafRunning = true;
+                        requestAnimationFrame(countFrame);
+                    })();
+                ");
+
+                if (diagnosticTimer != null && isActive)
+                    diagnosticTimer.Start();
 
                 if (!string.IsNullOrWhiteSpace(Profile.TargetUrl))
                 {
-                    WriteRefreshLog(
-                        "Initial navigation: " + Profile.TargetUrl);
-
+                    WriteRefreshLog("Initial navigation: " + GetSafeUrl(Profile.TargetUrl));
                     WebView.Source = new Uri(Profile.TargetUrl);
                 }
 
-                WebViewManager.SetMemoryNormal(WebView);
+                if (isActive)
+                    WebViewManager.SetMemoryNormal(WebView);
+                else
+                    WebViewManager.SetMemoryLow(WebView);
 
                 UpdateMuteButton();
-
                 WriteRefreshLog("WebView initialization completed");
             }
             catch (Exception ex)
             {
-                WriteRefreshLog(
-                    "Initialization exception: " + ex);
-
+                WriteRefreshLog("Initialization exception: " + ex);
                 if (!isDisposed)
-                {
-                    MessageBox.Show(
-                        "ไม่สามารถเปิด Client ได้\n\n" + ex.Message,
-                        "Lumivara Multi Client",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-                }
+                    MessageBox.Show("ไม่สามารถเปิด Client ได้\n\n" + ex.Message,
+                        "Lumivara Multi Client", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
             {
@@ -234,53 +243,72 @@ namespace LumivaraMultiClient.Controls
             }
         }
 
-        // =========================================================
-        // SET ACTIVE
-        // =========================================================
-
         public void SetActive(bool active)
         {
-            if (isDisposed || WebView == null)
+            if (isDisposed)
                 return;
 
-            if (WebView.CoreWebView2 == null)
+            isActive = active;
+
+            try
+            {
+                if (WebView != null && WebView.CoreWebView2 != null)
+                {
+                    if (active)
+                        WebViewManager.SetMemoryNormal(WebView);
+                    else
+                        WebViewManager.SetMemoryLow(WebView);
+                }
+
+                // เก็บ Diagnostic เฉพาะ Client ที่กำลังใช้งาน
+                // ลดงานตรวจวัดซ้ำ ๆ ใน Client ที่อยู่เบื้องหลัง
+                if (diagnosticTimer != null)
+                {
+                    if (active)
+                        diagnosticTimer.Start();
+                    else
+                        diagnosticTimer.Stop();
+                }
+
+                SetPageDiagnosticsEnabled(active);
+            }
+            catch (Exception ex)
+            {
+                WriteRefreshLog("SetActive exception: " + ex.Message);
+            }
+        }
+
+        private async void SetPageDiagnosticsEnabled(bool enabled)
+        {
+            if (isDisposed || WebView == null || WebView.IsDisposed ||
+                WebView.CoreWebView2 == null)
                 return;
 
             try
             {
-                if (active)
-                    WebViewManager.SetMemoryNormal(WebView);
-                else
-                    WebViewManager.SetMemoryLow(WebView);
+                string value = enabled ? "true" : "false";
+                await WebView.ExecuteScriptAsync(
+                    "if (window.__lumiDiagSetEnabled) window.__lumiDiagSetEnabled(" + value + ");");
             }
             catch (Exception ex)
             {
-                WriteRefreshLog(
-                    "SetActive exception: " + ex.Message);
+                if (!isDisposed)
+                    WriteRefreshLog("Set page diagnostic state failed: " + ex.Message);
             }
         }
-
-        // =========================================================
-        // REFRESH
-        // =========================================================
 
         private void BtnRefresh_Click(object sender, EventArgs e)
         {
             if (isDisposed || WebView == null)
                 return;
-
             if (WebView.CoreWebView2 == null)
             {
-                WriteRefreshLog(
-                    "Refresh rejected: CoreWebView2 is not ready");
+                WriteRefreshLog("Refresh rejected: CoreWebView2 is not ready");
                 return;
             }
-
-            // ป้องกันการสั่งรีเฟรชซ้ำระหว่างที่กำลังโหลด
             if (isRefreshing)
             {
-                WriteRefreshLog(
-                    "Refresh ignored: another refresh is in progress");
+                WriteRefreshLog("Refresh ignored: another refresh is in progress");
                 return;
             }
 
@@ -289,187 +317,233 @@ namespace LumivaraMultiClient.Controls
                 isRefreshing = true;
                 refreshTimer.Reset();
                 refreshTimer.Start();
-
                 btnRefresh.Enabled = false;
                 btnRefresh.Text = "กำลังโหลด...";
-
                 refreshTimeoutTimer.Stop();
                 refreshTimeoutTimer.Start();
+                refreshProgressTimer.Stop();
+                refreshProgressTimer.Start();
 
-                WriteRefreshLog(
-                    "Refresh started"
-                    + " | URL: " + WebView.Source
-                    + " | Timeout: "
-                    + (RefreshTimeoutMilliseconds / 1000)
-                    + " seconds");
-
+                WriteRefreshLog("Refresh started | URL: "
+                    + GetSafeUrl(WebView.Source == null ? null : WebView.Source.ToString())
+                    + " | Timeout: " + (RefreshTimeoutMilliseconds / 1000) + " seconds");
                 WebView.CoreWebView2.Reload();
             }
             catch (Exception ex)
             {
-                WriteRefreshLog(
-                    "Refresh exception: " + ex);
-
+                WriteRefreshLog("Refresh exception: " + ex);
                 FinishRefresh("Refresh command failed");
             }
         }
 
-        // =========================================================
-        // NAVIGATION COMPLETED
-        // =========================================================
+        private static string GetSafeUrl(string url)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(url)) return "Unknown";
+                Uri uri = new Uri(url);
+                return uri.GetLeftPart(UriPartial.Path); // ไม่เก็บ query/token
+            }
+            catch { return string.IsNullOrEmpty(url) ? "Unknown" : "URL unavailable"; }
+        }
+
+        private void WebView_NavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (isDisposed) return;
+            Stopwatch timer = new Stopwatch();
+            timer.Start();
+            navigationTimers[e.NavigationId] = timer;
+            WriteRefreshLog("NavigationStarting | NavigationId: " + e.NavigationId
+                + " | Redirect: " + e.IsRedirected + " | URL: " + GetSafeUrl(e.Uri)
+                + " | RefreshInProgress: " + isRefreshing);
+        }
+
+        private void WebView_DOMContentLoaded(object sender, CoreWebView2DOMContentLoadedEventArgs e)
+        {
+            if (isDisposed) return;
+            Stopwatch timer;
+            string elapsed = navigationTimers.TryGetValue(e.NavigationId, out timer)
+                ? timer.ElapsedMilliseconds + " ms" : "unknown";
+            WriteRefreshLog("DOMContentLoaded | NavigationId: " + e.NavigationId
+                + " | Since NavigationStarting: " + elapsed
+                + " | URL: " + GetSafeUrl(WebView == null || WebView.Source == null
+                    ? null : WebView.Source.ToString()));
+        }
+
+        private void WebView_WebResourceResponseReceived(object sender,
+            CoreWebView2WebResourceResponseReceivedEventArgs e)
+        {
+            if (isDisposed || e == null || e.Response == null) return;
+            try
+            {
+                int statusCode = e.Response.StatusCode;
+                if (statusCode >= 400)
+                {
+                    string requestUrl = e.Request == null ? "Unknown" : GetSafeUrl(e.Request.Uri);
+                    WriteRefreshLog("Resource HTTP ERROR | Status: " + statusCode
+                        + " | Method: " + (e.Request == null ? "Unknown" : e.Request.Method)
+                        + " | URL: " + requestUrl);
+                }
+            }
+            catch (Exception ex) { WriteRefreshLog("Resource diagnostic exception: " + ex.Message); }
+        }
 
         private void WebView_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (isDisposed)
-                return;
+            if (isDisposed) return;
+            Stopwatch navTimer;
+            string duration = "unknown";
+            if (navigationTimers.TryGetValue(e.NavigationId, out navTimer))
+            {
+                duration = navTimer.ElapsedMilliseconds + " ms";
+                navigationTimers.Remove(e.NavigationId);
+            }
 
-            if (!isRefreshing)
-                return;
+            WriteRefreshLog("NavigationCompleted | NavigationId: " + e.NavigationId
+                + " | Result: " + (e.IsSuccess ? "SUCCESS" : "FAILED")
+                + " | WebErrorStatus: " + (e.IsSuccess ? "None" : e.WebErrorStatus.ToString())
+                + " | NavigationDuration: " + duration
+                + " | URL: " + GetSafeUrl(WebView == null || WebView.Source == null
+                    ? null : WebView.Source.ToString()));
 
-            long elapsedMilliseconds =
-                refreshTimer.ElapsedMilliseconds;
+            // Script ถูกติดตั้งใหม่ทุกครั้งที่เปลี่ยน document จึงตั้งสถานะตาม Active อีกครั้ง
+            SetPageDiagnosticsEnabled(isActive);
 
-            string status = e.IsSuccess
-                ? "SUCCESS"
-                : "FAILED";
-
-            string errorStatus = e.IsSuccess
-                ? "None"
-                : e.WebErrorStatus.ToString();
-
-            WriteRefreshLog(
-                "Refresh completed"
-                + " | Result: " + status
-                + " | Duration: " + elapsedMilliseconds + " ms"
-                + " (" + (elapsedMilliseconds / 1000.0).ToString("F2")
-                + " sec)"
-                + " | WebErrorStatus: " + errorStatus
-                + " | URL: " + WebView.Source);
-
+            if (!isRefreshing) return;
+            long elapsed = refreshTimer.ElapsedMilliseconds;
+            WriteRefreshLog("Refresh completed | Result: " + (e.IsSuccess ? "SUCCESS" : "FAILED")
+                + " | Duration: " + elapsed + " ms (" + (elapsed / 1000.0).ToString("F2")
+                + " sec) | WebErrorStatus: " + (e.IsSuccess ? "None" : e.WebErrorStatus.ToString())
+                + " | URL: " + GetSafeUrl(WebView == null || WebView.Source == null
+                    ? null : WebView.Source.ToString()));
             FinishRefresh("Navigation completed");
         }
 
-        // =========================================================
-        // REFRESH TIMEOUT
-        // =========================================================
-
-        private void RefreshTimeoutTimer_Tick(
-            object sender,
-            EventArgs e)
+        private void RefreshProgressTimer_Tick(object sender, EventArgs e)
         {
-            if (isDisposed || !isRefreshing)
+            if (isDisposed || !isRefreshing) return;
+            WriteRefreshLog("Refresh still in progress | Elapsed: "
+                + (refreshTimer.ElapsedMilliseconds / 1000.0).ToString("F1")
+                + " sec | URL: " + GetSafeUrl(WebView == null || WebView.Source == null
+                    ? null : WebView.Source.ToString()));
+        }
+
+        private async void DiagnosticTimer_Tick(object sender, EventArgs e)
+        {
+            if (isDisposed || isCollectingDiagnostic || WebView == null
+                || WebView.IsDisposed || WebView.CoreWebView2 == null)
                 return;
 
-            WriteRefreshLog(
-                "Refresh TIMEOUT"
-                + " | Elapsed: "
-                + refreshTimer.ElapsedMilliseconds + " ms"
-                + " | URL: "
-                + (WebView != null ? WebView.Source.ToString() : "Unknown")
-                + " | Navigation may still be running");
+            isCollectingDiagnostic = true;
+            try
+            {
+                string stats = await WebView.ExecuteScriptAsync(
+                    "window.__lumiDiagRead ? window.__lumiDiagRead() : null;");
+                if (isDisposed) return;
+                WriteRefreshLog("Page diagnostic | Stats: "
+                    + (string.IsNullOrEmpty(stats) ? "No data" : stats));
+                WriteWebViewProcessStats();
+            }
+            catch (Exception ex) { WriteRefreshLog("Page diagnostic failed: " + ex.Message); }
+            finally { isCollectingDiagnostic = false; }
+        }
 
+        private void WriteWebViewProcessStats()
+        {
+            Process[] processes = null;
+            long workingSet = 0;
+            TimeSpan cpuTime = TimeSpan.Zero;
+            int count = 0;
+            try
+            {
+                processes = Process.GetProcessesByName("msedgewebview2");
+                for (int i = 0; i < processes.Length; i++)
+                {
+                    try
+                    {
+                        workingSet += processes[i].WorkingSet64;
+                        cpuTime += processes[i].TotalProcessorTime;
+                        count++;
+                    }
+                    catch { }
+                }
+
+                DateTime now = DateTime.UtcNow;
+                string cpu = "warming up";
+                if (lastProcessSampleTime != DateTime.MinValue)
+                {
+                    double seconds = (now - lastProcessSampleTime).TotalSeconds;
+                    double cpuSeconds = (cpuTime - lastWebViewCpuTime).TotalSeconds;
+                    if (seconds > 0)
+                    {
+                        double percent = cpuSeconds / (seconds * Math.Max(1, Environment.ProcessorCount)) * 100.0;
+                        if (percent < 0) percent = 0;
+                        cpu = percent.ToString("F1") + "%";
+                    }
+                }
+                lastProcessSampleTime = now;
+                lastWebViewCpuTime = cpuTime;
+                WriteRefreshLog("WebView2 process stats (all WebView2 processes on this PC)"
+                    + " | Count: " + count + " | WorkingSet: " + (workingSet / (1024 * 1024))
+                    + " MB | CPU: " + cpu);
+            }
+            catch (Exception ex) { WriteRefreshLog("WebView2 process stats failed: " + ex.Message); }
+            finally
+            {
+                if (processes != null)
+                    for (int i = 0; i < processes.Length; i++)
+                        try { processes[i].Dispose(); } catch { }
+            }
+        }
+
+        private void RefreshTimeoutTimer_Tick(object sender, EventArgs e)
+        {
+            if (isDisposed || !isRefreshing) return;
+            WriteRefreshLog("Refresh TIMEOUT | Elapsed: " + refreshTimer.ElapsedMilliseconds
+                + " ms | URL: " + GetSafeUrl(WebView == null || WebView.Source == null
+                    ? null : WebView.Source.ToString()) + " | Navigation may still be running");
             FinishRefresh("Refresh timeout");
         }
 
-        // =========================================================
-        // FINISH REFRESH
-        // =========================================================
-
         private void FinishRefresh(string reason)
         {
-            if (refreshTimeoutTimer != null)
-                refreshTimeoutTimer.Stop();
-
-            if (refreshTimer.IsRunning)
-                refreshTimer.Stop();
-
+            if (refreshTimeoutTimer != null) refreshTimeoutTimer.Stop();
+            if (refreshProgressTimer != null) refreshProgressTimer.Stop();
+            if (refreshTimer.IsRunning) refreshTimer.Stop();
             isRefreshing = false;
 
-            if (isDisposed)
-                return;
-
-            if (btnRefresh != null && !btnRefresh.IsDisposed)
+            if (!isDisposed && btnRefresh != null && !btnRefresh.IsDisposed)
             {
                 btnRefresh.Enabled = true;
                 btnRefresh.Text = "รีเฟรช";
             }
-
             WriteRefreshLog("Refresh state reset | " + reason);
         }
 
-        // =========================================================
-        // MUTE / UNMUTE
-        // =========================================================
-
         private void BtnMute_Click(object sender, EventArgs e)
         {
-            if (isDisposed || WebView == null)
-                return;
-
-            if (WebView.CoreWebView2 == null)
-                return;
-
+            if (isDisposed || WebView == null || WebView.CoreWebView2 == null) return;
             try
             {
-                WebView.CoreWebView2.IsMuted =
-                    !WebView.CoreWebView2.IsMuted;
-
+                WebView.CoreWebView2.IsMuted = !WebView.CoreWebView2.IsMuted;
                 UpdateMuteButton();
-
-                WriteRefreshLog(
-                    WebView.CoreWebView2.IsMuted
-                        ? "Audio muted"
-                        : "Audio unmuted");
+                WriteRefreshLog(WebView.CoreWebView2.IsMuted ? "Audio muted" : "Audio unmuted");
             }
-            catch (Exception ex)
-            {
-                WriteRefreshLog(
-                    "Mute exception: " + ex.Message);
-            }
+            catch (Exception ex) { WriteRefreshLog("Mute exception: " + ex.Message); }
         }
-
-        // =========================================================
-        // UPDATE MUTE BUTTON
-        // =========================================================
 
         private void UpdateMuteButton()
         {
-            if (btnMute == null || WebView == null)
-                return;
-
-            if (WebView.CoreWebView2 == null)
-                return;
-
-            try
-            {
-                btnMute.Text =
-                    WebView.CoreWebView2.IsMuted
-                        ? "เปิดเสียง"
-                        : "ปิดเสียง";
-            }
-            catch
-            {
-            }
+            if (btnMute == null || WebView == null || WebView.CoreWebView2 == null) return;
+            try { btnMute.Text = WebView.CoreWebView2.IsMuted ? "เปิดเสียง" : "ปิดเสียง"; }
+            catch { }
         }
 
-        // =========================================================
-        // GET MEMORY LEVEL
-        // =========================================================
-
-        public CoreWebView2MemoryUsageTargetLevel
-            GetMemoryUsageLevel()
+        public CoreWebView2MemoryUsageTargetLevel GetMemoryUsageLevel()
         {
-            if (WebView == null)
-            {
-                return CoreWebView2MemoryUsageTargetLevel.Low;
-            }
-
+            if (WebView == null) return CoreWebView2MemoryUsageTargetLevel.Low;
             return WebViewManager.GetMemoryLevel(WebView);
         }
-
-        // =========================================================
-        // CLEANUP
-        // =========================================================
 
         protected override void Dispose(bool disposing)
         {
@@ -478,7 +552,6 @@ namespace LumivaraMultiClient.Controls
                 base.Dispose(disposing);
                 return;
             }
-
             isDisposed = true;
 
             if (disposing)
@@ -488,68 +561,55 @@ namespace LumivaraMultiClient.Controls
                     if (refreshTimeoutTimer != null)
                     {
                         refreshTimeoutTimer.Stop();
-
-                        refreshTimeoutTimer.Tick -=
-                            RefreshTimeoutTimer_Tick;
-
+                        refreshTimeoutTimer.Tick -= RefreshTimeoutTimer_Tick;
                         refreshTimeoutTimer.Dispose();
                         refreshTimeoutTimer = null;
                     }
                 }
-                catch
-                {
-                }
-
+                catch { }
+                try { refreshTimer.Stop(); } catch { }
                 try
                 {
-                    refreshTimer.Stop();
-                }
-                catch
-                {
-                }
-
-                try
-                {
-                    if (WebView != null)
+                    if (refreshProgressTimer != null)
                     {
-                        WebViewManager.SetMemoryLow(WebView);
+                        refreshProgressTimer.Stop();
+                        refreshProgressTimer.Tick -= RefreshProgressTimer_Tick;
+                        refreshProgressTimer.Dispose();
+                        refreshProgressTimer = null;
+                    }
+                    if (diagnosticTimer != null)
+                    {
+                        diagnosticTimer.Stop();
+                        diagnosticTimer.Tick -= DiagnosticTimer_Tick;
+                        diagnosticTimer.Dispose();
+                        diagnosticTimer = null;
                     }
                 }
-                catch
-                {
-                }
-
+                catch { }
+                try { if (WebView != null) WebViewManager.SetMemoryLow(WebView); } catch { }
                 try
                 {
                     if (WebView != null)
                     {
                         if (WebView.CoreWebView2 != null)
                         {
-                            WebView.CoreWebView2.NavigationCompleted -=
-                                WebView_NavigationCompleted;
+                            WebView.CoreWebView2.NavigationStarting -= WebView_NavigationStarting;
+                            WebView.CoreWebView2.DOMContentLoaded -= WebView_DOMContentLoaded;
+                            WebView.CoreWebView2.NavigationCompleted -= WebView_NavigationCompleted;
+                            WebView.CoreWebView2.WebResourceResponseReceived -= WebView_WebResourceResponseReceived;
                         }
-
                         WebView.Dispose();
                         WebView = null;
                     }
                 }
-                catch
-                {
-                }
-
+                catch { }
                 try
                 {
-                    if (btnMute != null)
-                        btnMute.Click -= BtnMute_Click;
-
-                    if (btnRefresh != null)
-                        btnRefresh.Click -= BtnRefresh_Click;
+                    if (btnMute != null) btnMute.Click -= BtnMute_Click;
+                    if (btnRefresh != null) btnRefresh.Click -= BtnRefresh_Click;
                 }
-                catch
-                {
-                }
+                catch { }
             }
-
             base.Dispose(disposing);
         }
     }
