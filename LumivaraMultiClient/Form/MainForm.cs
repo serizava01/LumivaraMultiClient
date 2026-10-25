@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -13,10 +14,6 @@ namespace LumivaraMultiClient.Forms
 {
     public partial class MainForm : Form
     {
-        // =========================================================
-        // Settings
-        // =========================================================
-
         // =========================================================
         // Client Data
         // =========================================================
@@ -34,6 +31,8 @@ namespace LumivaraMultiClient.Forms
             new Dictionary<string, AccountProfile>();
 
         private string selectedProfileId = null;
+        
+        private string Url = "https://lumivaraonline.com/";
 
         // =========================================================
         // Main UI
@@ -50,12 +49,17 @@ namespace LumivaraMultiClient.Forms
         private Label lblRunningCount;
         private Label lblClientStatus;
 
+        private Label lbURlnow;
+
+
         private Button btnAddClient;
         private Button btnHideToTray;
         private Button btnWiki;
         private Button btnUpdates;
         private Button btnGithub;
         private ComboBox nummonitor;
+
+
 
         private int maxClients = 10;
         private bool isLoadingClientCount = false;
@@ -165,10 +169,20 @@ namespace LumivaraMultiClient.Forms
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
 
+            lbURlnow = new Label
+            {
+                Text = "URLGmmeisNow: " + Url,
+                AutoSize = true,
+                Location = new Point(600, 13),
+                Font = new Font("Segoe UI", 9f),
+                ForeColor = Color.DimGray
+            };
+
             headerPanel.Controls.Add(lblSelectedClient);
             headerPanel.Controls.Add(lblRunningCount);
             headerPanel.Controls.Add(lblClientStatus);
             headerPanel.Controls.Add(nummonitor);
+            headerPanel.Controls.Add(lbURlnow);
 
             // =====================================================
             // SIDEBAR
@@ -225,13 +239,13 @@ namespace LumivaraMultiClient.Forms
             // ADD CLIENT
             // =====================================================
 
-            btnAddClient = CreateSidebarButton("+ เพิ่ม Client");
-            btnAddClient.Location = new Point(5, 5);
+            //btnAddClient = CreateSidebarButton("+ เพิ่ม Client");
+            //btnAddClient.Location = new Point(5, 5);
 
-            btnAddClient.Click += delegate
-            {
-                AddNewClient();
-            };
+            //btnAddClient.Click += delegate
+            //{
+            //    AddNewClient();
+            //};
 
             // =====================================================
             // HIDE TRAY
@@ -254,7 +268,7 @@ namespace LumivaraMultiClient.Forms
 
             btnWiki.Click += delegate
             {
-                LinkStart("https://lumivaraonline.com/wiki/#overview");
+                LinkStart($"{Url}wiki/#overview");
             };
 
             // =====================================================
@@ -266,7 +280,7 @@ namespace LumivaraMultiClient.Forms
 
             btnUpdates.Click += delegate
             {
-                LinkStart("https://lumivaraonline.com/changelog/");
+                LinkStart($"{Url}changelog/");
             };
 
             // =====================================================
@@ -546,7 +560,7 @@ namespace LumivaraMultiClient.Forms
                         {
                             ProfileId = profileId,
                             Title = "Client " + i,
-                            TargetUrl = "https://lumivaraonline.com/"
+                            TargetUrl = Url
                         };
 
                         profiles[profileId] = profile;
@@ -610,7 +624,7 @@ namespace LumivaraMultiClient.Forms
                 {
                     ProfileId = profileId,
                     Title = title,
-                    TargetUrl = "https://lumivaraonline.com/"
+                    TargetUrl = Url
                 };
 
                 profiles[profileId] = profile;

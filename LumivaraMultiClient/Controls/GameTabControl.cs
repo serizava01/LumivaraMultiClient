@@ -342,7 +342,7 @@ namespace LumivaraMultiClient.Controls
             {
                 if (string.IsNullOrWhiteSpace(url)) return "Unknown";
                 Uri uri = new Uri(url);
-                return uri.GetLeftPart(UriPartial.Path); // ไม่เก็บ query/token
+                return uri.GetLeftPart(UriPartial.Path);
             }
             catch { return string.IsNullOrEmpty(url) ? "Unknown" : "URL unavailable"; }
         }
