@@ -33,6 +33,8 @@ namespace LumivaraMultiClient.Services
 
         private static readonly object logLock = new object();
 
+        public static bool DiagnosticLoggingEnabled { get; set; } = true;
+
         // =========================================================
         // SHARED ENVIRONMENT
         // =========================================================
@@ -51,6 +53,9 @@ namespace LumivaraMultiClient.Services
         // เพื่อให้ทุกข้อความใช้ไฟล์เดียวกันและมีระบบหมุนเวียนไฟล์ร่วมกัน
         public static void WriteDiagnosticLog(string profileId, string message)
         {
+            if (!DiagnosticLoggingEnabled)
+                return;
+
             try
             {
                 if (!Directory.Exists(BaseDataPath))

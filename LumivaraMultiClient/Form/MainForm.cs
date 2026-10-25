@@ -1,5 +1,6 @@
 ﻿using LumivaraMultiClient.Controls;
 using LumivaraMultiClient.Models;
+using LumivaraMultiClient.Services;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -31,7 +32,7 @@ namespace LumivaraMultiClient.Forms
             new Dictionary<string, AccountProfile>();
 
         private string selectedProfileId = null;
-        
+
         private string Url = "https://lumivaraonline.com/";
 
         // =========================================================
@@ -58,6 +59,8 @@ namespace LumivaraMultiClient.Forms
         private Button btnUpdates;
         private Button btnGithub;
         private ComboBox nummonitor;
+        private CheckBox chkDiagnosticLog;
+        private bool isLoadingDiagnosticLog;
 
 
 
@@ -108,6 +111,7 @@ namespace LumivaraMultiClient.Forms
 
             InitializeClientCountSelector();
             LoadClientCount();
+            LoadDiagnosticLogSetting();
 
             CreateClientList();
             LoadSavedInstances();
@@ -171,18 +175,37 @@ namespace LumivaraMultiClient.Forms
 
             lbURlnow = new Label
             {
-                Text = "URLGmmeisNow: " + Url,
+                Text = "URLGammeisNow: "  + Url,
                 AutoSize = true,
                 Location = new Point(600, 13),
                 Font = new Font("Segoe UI", 9f),
                 ForeColor = Color.DimGray
             };
 
+            chkDiagnosticLog = new CheckBox
+            {
+                Text = "เก็บLog",
+                AutoSize = false,
+                Width = 85,
+                Height = 25,
+                TextAlign = ContentAlignment.MiddleRight,
+                Checked = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(headerPanel.ClientSize.Width - 95, 10),
+                Font = new Font("Segoe UI", 9f),
+                ForeColor = Color.Black,
+                BackColor = headerPanel.BackColor,
+                Cursor = Cursors.Hand
+            };
+            chkDiagnosticLog.CheckedChanged += ChkDiagnosticLog_CheckedChanged;
+
             headerPanel.Controls.Add(lblSelectedClient);
             headerPanel.Controls.Add(lblRunningCount);
             headerPanel.Controls.Add(lblClientStatus);
             headerPanel.Controls.Add(nummonitor);
             headerPanel.Controls.Add(lbURlnow);
+            headerPanel.Controls.Add(chkDiagnosticLog);
+            chkDiagnosticLog.BringToFront();
 
             // =====================================================
             // SIDEBAR
@@ -1247,6 +1270,46 @@ namespace LumivaraMultiClient.Forms
             SaveConfig();
         }
 
+        private void LoadDiagnosticLogSetting()
+        {
+            bool enabled = true;
+
+            try
+            {
+                if (File.Exists(ConfigFilePath))
+                {
+                    foreach (string line in File.ReadAllLines(ConfigFilePath))
+                    {
+                        string value = line.Trim();
+                        if (value.StartsWith("DiagnosticLogging=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            bool savedValue;
+                            if (bool.TryParse(value.Substring("DiagnosticLogging=".Length).Trim(), out savedValue))
+                                enabled = savedValue;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            isLoadingDiagnosticLog = true;
+            chkDiagnosticLog.Checked = enabled;
+            isLoadingDiagnosticLog = false;
+            WebViewManager.DiagnosticLoggingEnabled = enabled;
+        }
+
+        private void ChkDiagnosticLog_CheckedChanged(object sender, EventArgs e)
+        {
+            if (isLoadingDiagnosticLog || chkDiagnosticLog == null)
+                return;
+
+            WebViewManager.DiagnosticLoggingEnabled = chkDiagnosticLog.Checked;
+            SaveConfig();
+        }
+
         // =========================================================
         // Save Config
         // =========================================================
@@ -1264,6 +1327,7 @@ namespace LumivaraMultiClient.Forms
 
                 // บันทึกจำนวน Client
                 configLines.Add("MaxClients=" + maxClients);
+                configLines.Add("DiagnosticLogging=" + (chkDiagnosticLog != null && chkDiagnosticLog.Checked));
 
                 // บันทึก Client ที่กำลังเปิดอยู่
                 foreach (KeyValuePair<string, GameTabControl> pair in runningClients)
