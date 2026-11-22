@@ -30,8 +30,8 @@ namespace LumivaraMultiClient.Controls
         // ตัวนับรอบที่ FPS ตกต่อเนื่อง
         private int consecutiveLowFpsCount = 0;
         private const int LowFpsThreshold = 10;
-        private const int MaxConsecutiveLowFpsChecks = 3; // 3 รอบ x 30 วินาที = 1.5 นาที
-        private const double MaxHeapUsageRatio = 0.85;    // รีเฟรชเมื่อ JS Heap เกิน 85%
+        private const int MaxConsecutiveLowFpsChecks = 3;
+        private const double MaxHeapUsageRatio = 0.85;
 
         private readonly Stopwatch refreshTimer = new Stopwatch();
         private readonly Dictionary<ulong, Stopwatch> navigationTimers =
