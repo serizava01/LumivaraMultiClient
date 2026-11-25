@@ -5,9 +5,6 @@ using LumivaraMultiClient.Models;
 
 namespace LumivaraMultiClient.Forms
 {
-    /// <summary>
-    /// ฟอร์มตั้งค่า Client (สร้างControls ในโค้ดทั้งหมด ไม่ใช้ Designer)
-    /// </summary>
     public class ClientSettingsForm : Form
     {
         private TextBox txtTitle;
@@ -25,40 +22,20 @@ namespace LumivaraMultiClient.Forms
         {
             this.defaultUrl = defaultUrl ?? "";
 
-            // ---------- ตั้งค่า Form ----------
-            this.Text = "ตั้งค่า Client - " + (profile != null ? profile.Title : "");
-            this.ClientSize = new Size(540, 180);
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.ShowInTaskbar = false;
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.Font = new Font("Segoe UI", 9f);
+            Text = "ตั้งค่า Client - " + (profile != null ? profile.Title : "");
+            ClientSize = new Size(540, 180);
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            AutoScaleMode = AutoScaleMode.Font;
+            Font = new Font("Segoe UI", 9f);
 
-            // ---------- Label: ชื่อ ----------
-            Label lblTitle = new Label
-            {
-                Text = "ชื่อที่แสดง:",
-                Location = new Point(15, 20),
-                AutoSize = true
-            };
+            Label lblTitle = new Label { Text = "ชื่อที่แสดง:", Location = new Point(15, 20), AutoSize = true };
+            txtTitle = new TextBox { Location = new Point(120, 17), Width = 390, Text = profile != null ? (profile.Title ?? "") : "" };
 
-            txtTitle = new TextBox
-            {
-                Location = new Point(120, 17),
-                Width = 390,
-                Text = profile != null ? (profile.Title ?? "") : ""
-            };
-
-            // ---------- Label: URL ----------
-            Label lblUrl = new Label
-            {
-                Text = "URL ของจอนี้:",
-                Location = new Point(15, 60),
-                AutoSize = true
-            };
-
+            Label lblUrl = new Label { Text = "URL ของจอนี้:", Location = new Point(15, 60), AutoSize = true };
             txtUrl = new TextBox
             {
                 Location = new Point(120, 57),
@@ -68,17 +45,9 @@ namespace LumivaraMultiClient.Forms
                     : this.defaultUrl
             };
 
-            // ---------- ปุ่ม Reset URL ----------
-            btnReset = new Button
-            {
-                Text = "ใช้ URL เริ่มต้น",
-                Location = new Point(120, 92),
-                Width = 130,
-                Height = 26
-            };
+            btnReset = new Button { Text = "ใช้ URL เริ่มต้น", Location = new Point(120, 92), Width = 130, Height = 26 };
             btnReset.Click += (s, e) => txtUrl.Text = this.defaultUrl;
 
-            // ---------- ปุ่ม บันทึก ----------
             btnOk = new Button
             {
                 Text = "บันทึก",
@@ -89,7 +58,6 @@ namespace LumivaraMultiClient.Forms
             };
             btnOk.Click += BtnOk_Click;
 
-            // ---------- ปุ่ม ยกเลิก ----------
             btnCancel = new Button
             {
                 Text = "ยกเลิก",
@@ -99,17 +67,16 @@ namespace LumivaraMultiClient.Forms
                 DialogResult = DialogResult.Cancel
             };
 
-            // ---------- เพิ่มControls เข้า Form ----------
-            this.Controls.Add(lblTitle);
-            this.Controls.Add(txtTitle);
-            this.Controls.Add(lblUrl);
-            this.Controls.Add(txtUrl);
-            this.Controls.Add(btnReset);
-            this.Controls.Add(btnOk);
-            this.Controls.Add(btnCancel);
+            Controls.Add(lblTitle);
+            Controls.Add(txtTitle);
+            Controls.Add(lblUrl);
+            Controls.Add(txtUrl);
+            Controls.Add(btnReset);
+            Controls.Add(btnOk);
+            Controls.Add(btnCancel);
 
-            this.AcceptButton = btnOk;
-            this.CancelButton = btnCancel;
+            AcceptButton = btnOk;
+            CancelButton = btnCancel;
         }
 
         private void BtnOk_Click(object sender, EventArgs e)
@@ -121,15 +88,15 @@ namespace LumivaraMultiClient.Forms
             {
                 MessageBox.Show("กรุณากรอกชื่อ Client", "ข้อมูลไม่ครบ",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                this.DialogResult = DialogResult.None;
+                DialogResult = DialogResult.None;
                 return;
             }
 
             if (!IsValidUrl(url))
             {
-                MessageBox.Show("URL ไม่ถูกต้อง (ต้องขึ้นต้นด้วย http:// หรือ https://)",
+                MessageBox.Show("URL ไม่ถูกต้อง (http:// หรือ https://)",
                     "URL ไม่ถูกต้อง", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                this.DialogResult = DialogResult.None;
+                DialogResult = DialogResult.None;
                 return;
             }
 
